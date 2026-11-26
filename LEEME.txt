@@ -1,0 +1,21 @@
+Mengutibo Clicker v1.1 — copia de trabajo
+
+Esta versión se basa en el proyecto organizado de v1.0. El original se conserva en:
+original/Mengutibo Clicker (v1.0).html
+
+Cambios aplicados:
+- Tooltip informativo con botón discreto de cierre.
+- Barra espaciadora: un único clic por pulsación; mantenerla no repite.
+- Guardado local automático periódico y al cerrar/ocultar la pestaña.
+- Umbrales de mejoras de edificios ajustados a 1, 10, 25, 50 y 100 unidades.
+- Indicación de edificio mejorado en el tooltip y título accesible de la mejora.
+- Producción visual limitada a 10 sprites por edificio (el contador conserva el total).
+- Gráfica circular y leyenda de porcentaje de producción por edificio en Estadísticas.
+- Colección de mejoras con espacios sin desbloquear.
+- Iconos de logros vinculados al edificio cuando el identificador del logro lo permite; estilo de color genérico.
+- Números en escala larga española (millones, billones, trillones, etc.).
+
+Nota:
+El sistema de Mengutibos profesionales no existe como entidad/mecánica en el código v1.0 que sirve de base. No se ha inventado una mecánica ni se ha añadido contenido ficticio para esa parte; necesita que se definan sus tipos y condiciones para integrarlo correctamente.
+
+El guardado automático utiliza localStorage del navegador. Se recomienda seguir exportando la partida desde Opciones como copia de seguridad.

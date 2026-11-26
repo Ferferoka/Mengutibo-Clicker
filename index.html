@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Mengutibo Clicker v1.0</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700;900&family=Lora:ital,wght@0,400;0,600;0,700;1,400&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body class="min-h-screen lg:h-screen flex flex-col lg:flex-row overflow-y-auto lg:overflow-hidden">
+
+  <!-- ===================================================================== -->
+  <!-- COLUMNA IZQUIERDA (30%): MENGUTIBO GIGANTE, CONTADOR Y MOJO PICÓN     -->
+  <!-- ===================================================================== -->
+  <section id="left-pane" class="cc-left-bg w-full lg:w-[30%] min-h-[470px] lg:h-full flex flex-col items-center justify-between relative shrink-0">
+    <!-- Canvas de fondo: rayos giratorios, lluvia, bolígrafos orbitando y olas de Mojo Picón -->
+    <canvas id="left-bg-canvas" class="absolute inset-0 w-full h-full pointer-events-none z-0"></canvas>
+
+    <!-- Nombre de la fábrica -->
+    <div class="relative z-10 w-full pt-4 px-3 text-center">
+      <button id="bakery-name-btn" class="px-4 py-1 rounded-full bg-black/45 hover:bg-black/65 border border-[#d9a46c]/35 text-[#f7e2c6] font-serif-title font-bold text-sm sm:text-base tracking-wide shadow transition cursor-pointer" title="Haz clic para cambiar el nombre de tu fábrica">
+        Fábrica de Mengutibos
+      </button>
+    </div>
+
+    <!-- Banner de contador principal -->
+    <div class="relative z-10 w-full cc-banner-box py-2.5 px-3 text-center my-2">
+      <div id="mengutibo-count" class="font-cookie text-2xl sm:text-3xl xl:text-4xl text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.95)] leading-tight">
+        0 Mengutibos
+      </div>
+      <div id="mengutibo-cps" class="text-xs sm:text-sm font-bold text-[#f2cfa5] drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)] mt-0.5">
+        por segundo: 0
+      </div>
+      <div id="active-buff-badge" class="hidden mt-1.5 inline-block px-2.5 py-0.5 rounded-full bg-amber-500/25 border border-amber-300/60 text-amber-200 text-xs font-bold animate-pulse">
+      </div>
+    </div>
+
+    <!-- Mengutibo Central Giratorio -->
+    <div class="relative z-10 flex-1 flex items-center justify-center w-full py-2">
+      <div id="big-mengutibo-wrapper" class="relative w-52 h-52 sm:w-60 sm:h-60 xl:w-64 xl:h-64 flex items-center justify-center cursor-pointer transition-transform duration-75 active:scale-95">
+        <canvas id="big-mengutibo-canvas" class="w-full h-full drop-shadow-[0_12px_22px_rgba(0,0,0,0.85)]"></canvas>
+      </div>
+    </div>
+
+    <!-- Indicador inferior de Mojo Picón (sobre las olas rojas) -->
+    <div class="relative z-10 w-full pb-2.5 pt-6 px-3 text-center pointer-events-none">
+      <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#3b0c06]/80 border border-[#ff7b66]/45 text-xs font-bold text-[#ffd6cf] shadow">
+        <span>🌶️ Mojo Picón: <span id="mojo-pct-label" class="text-[#ff9c8a]">0%</span></span>
+        <span class="text-[#ff9c8a]/60">|</span>
+        <span>Multiplicador: <span id="mojo-mult-label" class="text-[#ffe082]">x1.00</span></span>
+      </div>
+    </div>
+  </section>
+
+  <!-- SEPARADOR VERTICAL IZQUIERDO -->
+  <div class="hidden lg:block cc-wood-divider-v"></div>
+  <div class="block lg:hidden cc-wood-divider-h"></div>
+
+  <!-- ===================================================================== -->
+  <!-- COLUMNA CENTRAL (40%): MENÚ SUPERIOR, NOTICIAS, EDIFICIOS Y LOGROS     -->
+  <!-- ===================================================================== -->
+  <main class="cc-center-bg w-full lg:w-[40%] lg:h-full flex flex-col overflow-hidden">
+    <!-- Barra superior clásica de Cookie Clicker -->
+    <header class="bg-[#241309]/95 border-b-2 border-[#754b2b] p-2.5 flex flex-col gap-2 shrink-0 shadow-md">
+      <div class="flex flex-wrap items-center justify-between gap-1.5">
+        <div class="flex items-center gap-1.5">
+          <button data-tab="buildings" class="tab-btn cc-btn cc-btn-active px-3 py-1.5 rounded text-xs sm:text-sm font-serif-title font-bold">
+            Fábrica
+          </button>
+          <button data-tab="stats" class="tab-btn cc-btn px-3 py-1.5 rounded text-xs sm:text-sm font-serif-title font-bold">
+            Estadísticas
+          </button>
+          <button data-tab="options" class="tab-btn cc-btn px-3 py-1.5 rounded text-xs sm:text-sm font-serif-title font-bold">
+            Opciones
+          </button>
+          <button data-tab="info" class="tab-btn cc-btn px-3 py-1.5 rounded text-xs sm:text-sm font-serif-title font-bold">
+            Info.
+          </button>
+        </div>
+        <span class="px-2 py-0.5 rounded bg-[#140a04] border border-[#8c5d38]/60 text-[11px] font-bold text-[#e6bd8a]">
+          v1.0
+        </span>
+      </div>
+
+      <!-- Ticker de noticias tipo periódico bien encuadrado y legible al completo -->
+      <div class="bg-[#140a04] border border-[#734a2b] rounded px-3.5 py-2.5 min-h-[58px] flex items-center gap-3 shadow-inner">
+        <span class="shrink-0 px-2 py-0.5 rounded bg-[#5c361c] border border-[#a87449] text-[10px] font-serif-title font-bold uppercase tracking-wider text-[#ffe3bd]">
+          Periódico
+        </span>
+        <p id="news-ticker" class="text-xs sm:text-[13px] italic text-[#f5dec0] leading-relaxed flex-1 break-words">
+          "Tienes ganas de criar Mengutibos, aunque nadie en el barrio los conozca todavía."
+        </p>
+      </div>
+    </header>
+
+    <!-- Contenido dinámico de la columna central -->
+    <div id="center-scroll-area" class="flex-1 overflow-y-auto">
+
+      <!-- VISTA 1: ESCENARIOS VISUALES DE EDIFICIOS (como las filas de Cookie Clicker) -->
+      <div id="tab-buildings" class="tab-panel divide-y-4 divide-[#4a2b16]">
+        <div id="visual-stages-container" class="divide-y-4 divide-[#3d2312]"></div>
+        <div id="empty-stages-msg" class="p-8 text-center text-[#c9a379] text-sm">
+          <p class="font-serif-title font-bold text-base text-[#f0cfa8] mb-1">Tu fábrica está esperando trabajadores</p>
+          <p>Compra edificios en la tienda de la derecha para verlos producir Mengutibos aquí.</p>
+        </div>
+      </div>
+
+      <!-- VISTA 2: ESTADÍSTICAS Y MATRIZ DE LOGROS -->
+      <div id="tab-stats" class="tab-panel hidden p-4 space-y-5">
+        <div class="bg-[#1b0f07]/85 border border-[#7a4f2e] rounded-lg p-4 space-y-2 shadow">
+          <h2 class="font-serif-title font-bold text-lg text-[#ffd699] border-b border-[#6e4526] pb-1.5">
+            Estadísticas Generales
+          </h2>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs sm:text-sm text-[#edd5b8]">
+            <div>Mengutibos en banco: <span id="stat-bank" class="font-bold text-white">0</span></div>
+            <div>Mengutibos horneados (total): <span id="stat-baked" class="font-bold text-white">0</span></div>
+            <div>Mengutibos por segundo: <span id="stat-cps" class="font-bold text-white">0</span></div>
+            <div>Mengutibos por clic: <span id="stat-cpc" class="font-bold text-white">1</span></div>
+            <div>Clics manuales: <span id="stat-clicks" class="font-bold text-white">0</span></div>
+            <div>Edificios totales: <span id="stat-buildings" class="font-bold text-white">0</span></div>
+            <div>Mengutibos dorados clicados: <span id="stat-golden" class="font-bold text-white">0</span></div>
+            <div>Mojo Picón: <span id="stat-mojo" class="font-bold text-[#ff9c8a]">0%</span></div>
+          </div>
+        </div>
+
+        <div class="bg-[#1b0f07]/85 border border-[#7a4f2e] rounded-lg p-4 space-y-2 shadow">
+          <h2 class="font-serif-title font-bold text-lg text-[#ffd699] border-b border-[#6e4526] pb-1.5">Producción por edificio</h2>
+          <div class="flex flex-col sm:flex-row items-center gap-4"><canvas id="production-chart" width="220" height="220" aria-label="Gráfica circular de producción"></canvas><div id="production-legend" class="text-xs space-y-1 text-[#edd5b8]"></div></div>
+        </div>
+
+        <!-- Mejoras desbloqueadas -->
+        <div class="bg-[#1b0f07]/85 border border-[#7a4f2e] rounded-lg p-4 space-y-2.5 shadow">
+          <div class="flex items-center justify-between border-b border-[#6e4526] pb-1.5">
+            <h2 class="font-serif-title font-bold text-lg text-[#ffd699]">Mejoras Adquiridas</h2>
+            <span id="stat-upg-count" class="text-xs font-bold text-[#d4aa7d]">0/55</span>
+          </div>
+          <div id="owned-upgrades-grid" class="flex flex-wrap gap-1.5 min-h-[42px]"></div>
+        </div>
+
+        <!-- Logros -->
+        <div class="bg-[#1b0f07]/85 border border-[#7a4f2e] rounded-lg p-4 space-y-2.5 shadow">
+          <div class="flex items-center justify-between border-b border-[#6e4526] pb-1.5">
+            <h2 class="font-serif-title font-bold text-lg text-[#ffd699]">Logros</h2>
+            <span id="stat-ach-count" class="text-xs font-bold text-[#d4aa7d]">0/52</span>
+          </div>
+          <p class="text-xs text-[#c7a177]">Cada logro desbloqueado suma un <strong class="text-[#ff9c8a]">+4% de Mojo Picón</strong>.</p>
+          <div id="achievements-grid" class="flex flex-wrap gap-1.5"></div>
+        </div>
+      </div>
+
+      <!-- VISTA 3: OPCIONES (EXPORTAR / IMPORTAR PARTIDA) -->
+      <div id="tab-options" class="tab-panel hidden p-4 space-y-4">
+        <div class="bg-[#1b0f07]/85 border border-[#7a4f2e] rounded-lg p-4 space-y-3 shadow">
+          <h2 class="font-serif-title font-bold text-lg text-[#ffd699] border-b border-[#6e4526] pb-1.5">
+            Opciones y Guardado (v1.1)
+          </h2>
+          <p class="text-xs text-[#d6b692]">
+            Tu progreso se guarda automáticamente en memoria durante la sesión. Usa <strong>Exportar partida</strong> para copiar tu código de seguridad y <strong>Importar partida</strong> para restaurarlo en cualquier momento.
+          </p>
+          <div class="flex flex-wrap gap-2">
+            <button id="open-export-btn" class="cc-btn px-3.5 py-2 rounded text-xs sm:text-sm font-bold">
+              Exportar partida
+            </button>
+            <button id="open-import-btn" class="cc-btn px-3.5 py-2 rounded text-xs sm:text-sm font-bold">
+              Importar partida
+            </button>
+            <button id="toggle-sound-btn" class="cc-btn px-3.5 py-2 rounded text-xs sm:text-sm font-bold">
+              Sonido: Activado
+            </button>
+            <button id="reset-game-btn" class="px-3.5 py-2 rounded text-xs sm:text-sm font-bold bg-[#6e1c14] hover:bg-[#8c2419] border border-[#d96b5f] text-white">
+              Reiniciar partida
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- VISTA 4: INFO (SIN SPOILERS NI ANTICIPOS DEL JUEGO) -->
+      <div id="tab-info" class="tab-panel hidden p-4 space-y-4">
+        <div class="bg-[#1b0f07]/85 border border-[#7a4f2e] rounded-lg p-4 space-y-3 shadow text-xs sm:text-sm text-[#e8ceb0] leading-relaxed">
+          <div class="flex items-center justify-between border-b border-[#6e4526] pb-1.5">
+            <h2 class="font-serif-title font-bold text-lg text-[#ffd699]">Mengutibo Clicker</h2>
+            <span class="px-2 py-0.5 rounded bg-[#3b2212] border border-[#9c6c44] text-xs font-bold text-[#ffd699]">Versión 1.0</span>
+          </div>
+          <p>
+            <strong>Mengutibo Clicker</strong> es un juego incremental en el que tu objetivo es fabricar tantos Mengutibos como puedas.
+          </p>
+          <ul class="list-disc pl-5 space-y-1.5 text-[#d9ba96]">
+            <li>Haz clic sobre el Mengutibo gigante de la izquierda para fabricar Mengutibos manualmente.</li>
+            <li>Invierte tus Mengutibos en la <strong>Tienda</strong> para contratar ayuda y automatizar la producción.</li>
+            <li>Adquiere mejoras para potenciar la eficacia de tu producción y descubrir nuevas posibilidades.</li>
+            <li>Mantente atento a eventos especiales que pueden aparecer por pantalla de vez en cuando.</li>
+          </ul>
+          <p class="text-xs text-[#b58e65] pt-1 border-t border-[#4d2f19]">
+            Consejo: Puedes cambiar el nombre de tu fábrica haciendo clic en el cartel situado encima del Mengutibo, y guardar o restaurar tu progreso desde la pestaña <strong>Opciones</strong>.
+          </p>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- SEPARADOR VERTICAL DERECHO -->
+  <div class="hidden lg:block cc-wood-divider-v"></div>
+  <div class="block lg:hidden cc-wood-divider-h"></div>
+
+  <!-- ===================================================================== -->
+  <!-- COLUMNA DERECHA (30%): TIENDA (MEJORAS Y EDIFICIOS)                   -->
+  <!-- ===================================================================== -->
+  <aside class="cc-center-bg w-full lg:w-[30%] lg:h-full flex flex-col overflow-hidden">
+    <!-- Cabecera de Tienda -->
+    <div class="bg-[#241309]/95 border-b-2 border-[#754b2b] py-2 px-3 text-center shrink-0 shadow">
+      <h2 class="font-cookie text-xl sm:text-2xl text-[#f7e4cb] tracking-wide drop-shadow">Tienda</h2>
+    </div>
+
+    <div class="flex-1 overflow-y-auto">
+      <!-- Sección de Mejoras -->
+      <div class="bg-[#1b0e06]/90 border-b-2 border-[#6e4526] p-2.5">
+        <div class="flex items-center justify-between mb-1.5 px-0.5">
+          <span class="font-serif-title font-bold text-xs uppercase tracking-wider text-[#d9b282]">Mejoras</span>
+          <span id="available-upgrades-count" class="text-[11px] font-bold text-[#a88259]">0 disponibles</span>
+        </div>
+        <div id="upgrades-store-grid" class="flex flex-wrap gap-1.5 min-h-[62px]"></div>
+      </div>
+
+      <!-- Barra de modo Comprar / Vender y cantidad 1 / 10 / 100 -->
+      <div class="bg-[#29160b] border-b-2 border-[#6e4526] px-2.5 py-1.5 flex items-center justify-between gap-2 text-xs font-bold">
+        <div class="flex items-center gap-1">
+          <button id="mode-buy-btn" class="px-2.5 py-1 rounded bg-[#5c361c] border border-[#d9a46c] text-white">Comprar</button>
+          <button id="mode-sell-btn" class="px-2.5 py-1 rounded bg-[#211108] border border-[#613c22] text-[#b8926a]">Vender</button>
+        </div>
+        <div class="flex items-center gap-1">
+          <button data-bulk="1" class="bulk-btn px-2 py-1 rounded bg-[#5c361c] border border-[#d9a46c] text-white">1</button>
+          <button data-bulk="10" class="bulk-btn px-2 py-1 rounded bg-[#211108] border border-[#613c22] text-[#b8926a]">10</button>
+          <button data-bulk="100" class="bulk-btn px-2 py-1 rounded bg-[#211108] border border-[#613c22] text-[#b8926a]">100</button>
+        </div>
+      </div>
+
+      <!-- Lista de Edificios -->
+      <div id="buildings-store-list" class="divide-y divide-[#1f1108]"></div>
+    </div>
+  </aside>
+
+  <!-- ===================================================================== -->
+  <!-- TOOLTIP FLOTANTE ESTILO COOKIE CLICKER                                -->
+  <!-- ===================================================================== -->
+  <div id="cc-tooltip" class="fixed z-50 pointer-events-auto hidden max-w-[310px] bg-[#1a0e07]/95 border-2 border-[#b88454] rounded-md p-3 shadow-[0_8px_24px_rgba(0,0,0,0.92)] text-xs">
+    <div class="flex items-start justify-between gap-2">
+      <div class="flex items-center gap-2 min-w-0">
+        <div class="cc-icon-cell w-10 h-10 rounded">
+          <img id="tt-icon" src="" alt="" class="w-8 h-8 object-contain" style="image-rendering: pixelated;" />
+        </div>
+        <div class="min-w-0">
+          <div id="tt-name" class="font-serif-title font-bold text-sm text-white leading-tight"></div>
+          <div id="tt-badge" class="hidden mt-1 inline-block px-2 py-0.5 rounded text-[10px] font-extrabold tracking-wide"></div>
+        </div>
+      </div>
+      <div class="flex items-start gap-1"><div id="tt-price" class="font-extrabold text-right shrink-0 text-xs"></div><button id="tt-close" type="button" aria-label="Cerrar información" class="tt-close hidden" title="Cerrar">×</button></div>
+    </div>
+    <div id="tt-effect" class="mt-2 pt-1.5 border-t border-[#593820] text-[#9ef0b5] font-semibold leading-snug"></div>
+    <div id="tt-desc" class="mt-1.5 italic text-[#d6b896] leading-snug"></div>
+  </div>
+
+  <!-- ===================================================================== -->
+  <!-- MODAL PARA EXPORTAR / IMPORTAR / RENOMBRAR / REINICIAR                -->
+  <!-- ===================================================================== -->
+  <div id="cc-modal-backdrop" class="fixed inset-0 z-50 hidden bg-black/75 flex items-center justify-center p-4">
+    <div class="bg-[#26140a] border-2 border-[#b88454] rounded-lg max-w-md w-full p-4 space-y-3 shadow-2xl">
+      <div class="flex items-center justify-between border-b border-[#6e4526] pb-2">
+        <h3 id="modal-title" class="font-serif-title font-bold text-base text-[#ffd699]">Exportar partida</h3>
+        <button id="modal-close-btn" class="text-[#d6b692] hover:text-white font-bold text-sm px-2">✕</button>
+      </div>
+      <p id="modal-subtitle" class="text-xs text-[#dec09c]"></p>
+      <textarea id="modal-textarea" rows="4" class="w-full bg-[#140a04] border border-[#7a4f2e] rounded p-2 text-xs text-[#f5dec0] font-mono focus:outline-none focus:border-[#e0a96d]"></textarea>
+      <input id="modal-input" type="text" maxlength="32" class="hidden w-full bg-[#140a04] border border-[#7a4f2e] rounded p-2 text-sm text-[#f5dec0] focus:outline-none focus:border-[#e0a96d]" />
+      <div id="modal-feedback" class="hidden text-xs font-bold text-[#7ef29d]"></div>
+      <div class="flex justify-end gap-2 pt-1">
+        <button id="modal-cancel-btn" class="cc-btn px-3 py-1.5 rounded text-xs font-bold">Cerrar</button>
+        <button id="modal-action-btn" class="cc-btn cc-btn-active px-3.5 py-1.5 rounded text-xs font-bold">Copiar código</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================================================================== -->
+  <!-- NOTIFICACIONES DE LOGROS DESBLOQUEADOS                                -->
+  <!-- ===================================================================== -->
+  <div id="achievement-toast-container" class="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 flex flex-col gap-2 pointer-events-none w-full max-w-sm px-3"></div>
+
+  <script src="js/game.js"></script>
+</body>
+</html>

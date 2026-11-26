@@ -1,0 +1,2345 @@
+
+    window.addEventListener('load', () => {
+      // =========================================================================
+      // MOTOR DE SONIDO SINTÉTICO (Tone / Web Audio API sin archivos externos)
+      // =========================================================================
+      let soundEnabled = true;
+      let audioCtx = null;
+
+      function playTone(freq, type = 'sine', duration = 0.08, vol = 0.08) {
+        if (!soundEnabled) return;
+        try {
+          if (!audioCtx) {
+            const Ctx = window.AudioContext || window.webkitAudioContext;
+            if (Ctx) audioCtx = new Ctx();
+          }
+          if (!audioCtx) return;
+          if (audioCtx.state === 'suspended') audioCtx.resume();
+          const osc = audioCtx.createOscillator();
+          const gain = audioCtx.createGain();
+          osc.type = type;
+          osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+          gain.gain.setValueAtTime(vol, audioCtx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+          osc.connect(gain);
+          gain.connect(audioCtx.destination);
+          osc.start();
+          osc.stop(audioCtx.currentTime + duration);
+        } catch (e) {
+          // Ignorar restricciones de audio del navegador
+        }
+      }
+
+      // =========================================================================
+      // FORMATEO DE NÚMEROS EN ESPAÑOL
+      // =========================================================================
+      const NUM_SUFFIXES = [
+        { val: 1e24, name: 'cuatrillones' }, { val: 1e21, name: 'mil trillones' },
+        { val: 1e18, name: 'trillones' }, { val: 1e15, name: 'mil billones' },
+        { val: 1e12, name: 'billones' }, { val: 1e9, name: 'mil millones' },
+        { val: 1e6, name: 'millones' }
+      ];
+
+      function formatNum(n, decimals = 1) {
+        if (!isFinite(n) || n < 0) return '0';
+        if (n < 1000) {
+          return Number.isInteger(n) ? n.toString() : n.toFixed(decimals).replace('.', ',');
+        }
+        if (n < 1e6) {
+          return Math.floor(n).toLocaleString('es-ES');
+        }
+        for (const s of NUM_SUFFIXES) {
+          if (n >= s.val) {
+            const v = (n / s.val).toFixed(3).replace('.', ',');
+            return `${v} ${s.name}`;
+          }
+        }
+        return Math.floor(n).toLocaleString('es-ES');
+      }
+
+      // =========================================================================
+      // GENERADOR DE SPRITES PIXEL ART CLÁSICO (32x32 NÍTIDO)
+      // =========================================================================
+      const spriteCache = {};
+      const imageObjCache = {};
+
+      function createPixelArt32(drawFn, isGolden = false) {
+        const c = document.createElement('canvas');
+        c.width = 32;
+        c.height = 32;
+        const ctx = c.getContext('2d');
+        ctx.imageSmoothingEnabled = false;
+
+        const px = (x, y, w, h, color) => {
+          ctx.fillStyle = color;
+          ctx.fillRect(Math.round(x), Math.round(y), Math.round(w), Math.round(h));
+        };
+
+        drawFn(px, ctx);
+
+        if (isGolden) {
+          const imgData = ctx.getImageData(0, 0, 32, 32);
+        const d = imgData.data;
+        for (let i = 0; i < d.length; i += 4) {
+          if (d[i + 3] > 0) {
+            const lum = (d[i] * 0.3 + d[i + 1] * 0.59 + d[i + 2] * 0.11) / 255;
+            d[i] = Math.min(255, Math.floor(175 + lum * 80));
+            d[i + 1] = Math.min(255, Math.floor(125 + lum * 110));
+            d[i + 2] = Math.min(255, Math.floor(15 + lum * 55));
+          }
+        }
+        ctx.putImageData(imgData, 0, 0);
+      }
+
+      return c.toDataURL('image/png');
+    }
+
+    const METAL_TIERS = [
+      // 0: Cobre / Bronce
+      { dark: '#4a2511', shadow: '#7c4220', mid: '#b86b35', light: '#d98f54', highlight: '#f5be8c' },
+      // 1: Plata
+      { dark: '#434a54', shadow: '#656d78', mid: '#aab2bd', light: '#ccd1d9', highlight: '#f5f7fa' },
+      // 2: Oro
+      { dark: '#6e470b', shadow: '#a67114', mid: '#e0a422', light: '#f7c844', highlight: '#fff099' },
+      // 3: Platino / Cian
+      { dark: '#1d4e5f', shadow: '#2d768f', mid: '#5cc2db', light: '#99e2f2', highlight: '#e0faff' },
+      // 4: Esmeralda
+      { dark: '#0f4726', shadow: '#1b7a43', mid: '#2ecc71', light: '#6ee89e', highlight: '#c4ffda' },
+      // 5: Rubí
+      { dark: '#590d1b', shadow: '#96182e', mid: '#db2745', light: '#f5627b', highlight: '#ffb8c4' },
+      // 6: Amatista
+      { dark: '#391859', shadow: '#612b96', mid: '#954ce0', light: '#be87f5', highlight: '#ead4ff' },
+      // 7: Obsidiana / Diamante
+      { dark: '#12131a', shadow: '#262938', mid: '#444963', light: '#737ba3', highlight: '#c7d0ff' }
+    ];
+
+    function getCurrentMetalTier() {
+      const count = typeof state !== 'undefined' && state && state.unlockedAchievements
+        ? state.unlockedAchievements.length
+        : 0;
+      if (count >= 45) return 7;
+      if (count >= 36) return 6;
+      if (count >= 28) return 5;
+      if (count >= 20) return 4;
+      if (count >= 13) return 3;
+      if (count >= 7) return 2;
+      if (count >= 3) return 1;
+      return 0;
+    }
+
+    function createMetallicMengutibo32(palette) {
+      return createPixelArt32((px) => {
+        // Pelo gris metalizado arriba
+        px(11, 2, 2, 4, palette.light);
+        px(14, 1, 2, 5, palette.highlight);
+        px(17, 2, 2, 4, palette.light);
+        px(20, 3, 2, 3, palette.mid);
+
+        // Rostro redondo metalizado
+        for (let y = 5; y <= 29; y++) {
+          for (let x = 4; x <= 27; x++) {
+            const dx = (x - 15.5) / 11.4;
+            const dy = (y - 17.0) / 11.8;
+            const dist = dx * dx + dy * dy;
+            if (dist <= 1.0) {
+              let col = palette.mid;
+              if (dist > 0.86) col = palette.dark;
+              else if (dx < -0.35 && dy < -0.25) col = palette.highlight;
+              else if (dx < -0.1 && dy < -0.1) col = palette.light;
+              else if (dx > 0.45 || dy > 0.5) col = palette.shadow;
+              px(x, y, 1, 1, col);
+            }
+          }
+        }
+
+        // Destello especular
+        px(8, 8, 2, 1, '#ffffff');
+        px(7, 9, 1, 2, '#ffffff');
+
+        // Ojos fieles a la imagen de referencia
+        px(7, 10, 6, 6, '#ffffff');
+        px(7, 10, 1, 1, palette.mid);
+        px(12, 10, 1, 1, palette.mid);
+        px(7, 15, 1, 1, palette.mid);
+        px(12, 15, 1, 1, palette.mid);
+        px(9, 12, 2, 2, '#111111');
+
+        px(19, 10, 6, 6, '#ffffff');
+        px(19, 10, 1, 1, palette.mid);
+        px(24, 10, 1, 1, palette.mid);
+        px(19, 15, 1, 1, palette.mid);
+        px(24, 15, 1, 1, palette.mid);
+        px(21, 12, 2, 2, '#111111');
+
+        // Nariz larga y estrecha con contorno oscuro
+        px(14, 13, 1, 6, palette.dark);
+        px(17, 13, 1, 6, palette.dark);
+        px(15, 18, 2, 1, palette.dark);
+        px(15, 13, 2, 5, palette.light);
+
+        // Sonrisa curva
+        px(10, 21, 1, 2, palette.dark);
+        px(11, 23, 10, 1, palette.dark);
+        px(21, 21, 1, 2, palette.dark);
+        px(13, 25, 6, 1, palette.dark);
+
+        // Moco verde de dos tonos
+        px(13, 19, 2, 3, '#63b821');
+        px(13, 22, 2, 3, '#9ef03c');
+      });
+    }
+
+    function drawBaseMengutibo(px) {
+        // Pelo gris con mechones arriba (fiel a la imagen)
+        px(11, 2, 2, 4, '#b5b5b5');
+        px(14, 1, 2, 5, '#c7c7c7');
+        px(17, 2, 2, 4, '#b5b5b5');
+        px(20, 3, 2, 3, '#a6a6a6');
+
+        // Rostro redondo tono tierra cálido
+        for (let y = 5; y <= 29; y++) {
+          for (let x = 4; x <= 27; x++) {
+            const dx = (x - 15.5) / 11.4;
+            const dy = (y - 17.0) / 11.8;
+            const dist = dx * dx + dy * dy;
+            if (dist <= 1.0) {
+              let col = '#a18672';
+              if (dist > 0.86) col = '#7a6251';
+              else if (dx < -0.32 && dy < -0.22) col = '#ad927e';
+              else if (dx > 0.45 || dy > 0.52) col = '#8c725f';
+              px(x, y, 1, 1, col);
+            }
+          }
+        }
+
+        // Ojo izquierdo blanco redondeado con pupila negra centrada
+        px(7, 10, 6, 6, '#ffffff');
+        px(7, 10, 1, 1, '#a18672');
+        px(12, 10, 1, 1, '#a18672');
+        px(7, 15, 1, 1, '#a18672');
+        px(12, 15, 1, 1, '#a18672');
+        px(9, 12, 2, 2, '#111111');
+
+        // Ojo derecho blanco redondeado con pupila negra centrada
+        px(19, 10, 6, 6, '#ffffff');
+        px(19, 10, 1, 1, '#a18672');
+        px(24, 10, 1, 1, '#a18672');
+        px(19, 15, 1, 1, '#a18672');
+        px(24, 15, 1, 1, '#a18672');
+        px(21, 12, 2, 2, '#111111');
+
+        // Nariz alargada estrecha con contorno marrón oscuro (como en la imagen)
+        px(14, 13, 1, 6, '#523b2c');
+        px(17, 13, 1, 6, '#523b2c');
+        px(15, 18, 2, 1, '#523b2c');
+        px(15, 13, 2, 5, '#a18672');
+
+        // Sonrisa curva y barbilla marcada
+        px(10, 21, 1, 2, '#523b2c');
+        px(11, 23, 10, 1, '#523b2c');
+        px(21, 21, 1, 2, '#523b2c');
+        px(13, 25, 6, 1, '#523b2c');
+
+        // Moco verde en dos tonos bajando desde la fosa izquierda hacia el labio
+        px(13, 19, 2, 3, '#63b821');
+        px(13, 22, 2, 3, '#9ef03c');
+      }
+
+      function getSprite(id) {
+        if (id.startsWith('ach_')) {
+          const tier = getCurrentMetalTier();
+          const cacheKey = `ach_tier_${tier}`;
+          if (spriteCache[cacheKey]) return spriteCache[cacheKey];
+          const url = createMetallicMengutibo32(METAL_TIERS[tier]);
+          spriteCache[cacheKey] = url;
+          return url;
+        }
+
+        if (spriteCache[id]) return spriteCache[id];
+
+        let url = '';
+        if (id === 'mengutibo') {
+          url = createPixelArt32(drawBaseMengutibo, false);
+        } else if (id === 'mengutibo_gold') {
+          url = createPixelArt32(drawBaseMengutibo, true);
+        } else if (id === 'mojo') {
+          url = createPixelArt32((px) => {
+            px(14, 4, 4, 3, '#2f7a24');
+            px(15, 3, 2, 2, '#45a836');
+            px(12, 7, 8, 17, '#c92a18');
+            px(13, 8, 6, 15, '#e83b27');
+            px(14, 9, 2, 12, '#ff7766');
+            px(10, 23, 12, 4, '#9c1c0e');
+          });
+        } else if (id.startsWith('upg_mojo_')) {
+          const tier = parseInt(id.split('_')[2], 10) || 1;
+          url = createPixelArt32((px) => {
+            const drawRoundedHead = (skin, hairMain, hairLight, hairStyle) => {
+              px(8, 19, 16, 10, '#d93829');
+              px(7, 21, 18, 8, '#d93829');
+              px(10, 18, 12, 2, '#d93829');
+              px(14, 17, 4, 2, skin);
+              px(11, 6, 10, 11, skin);
+              px(10, 8, 12, 7, skin);
+              px(12, 10, 2, 2, '#1e3a5f');
+              px(18, 10, 2, 2, '#1e3a5f');
+              px(14, 14, 4, 1, '#9c4b3b');
+
+              if (hairStyle === 'boy') {
+                px(10, 4, 12, 3, hairMain);
+                px(11, 3, 10, 2, hairLight);
+                px(9, 6, 2, 4, hairMain);
+                px(21, 6, 2, 4, hairMain);
+              } else if (hairStyle === 'mom') {
+                px(9, 4, 14, 4, hairMain);
+                px(11, 3, 10, 2, hairLight);
+                px(8, 7, 3, 9, hairMain);
+                px(21, 7, 3, 9, hairMain);
+              } else if (hairStyle === 'grandma') {
+                px(13, 2, 6, 3, hairLight);
+                px(9, 5, 14, 4, hairMain);
+                px(8, 8, 2, 6, hairMain);
+                px(22, 8, 2, 6, hairMain);
+                px(11, 10, 4, 2, '#4a5568');
+                px(17, 10, 4, 2, '#4a5568');
+                px(15, 10, 2, 1, '#4a5568');
+              } else if (hairStyle === 'sister') {
+                px(9, 4, 14, 4, hairMain);
+                px(11, 3, 10, 2, hairLight);
+                px(8, 6, 3, 14, hairMain);
+                px(21, 6, 3, 14, hairMain);
+                px(9, 16, 2, 5, hairLight);
+                px(21, 16, 2, 5, hairLight);
+              } else if (hairStyle === 'cousin') {
+                px(9, 4, 14, 4, hairMain);
+                px(11, 3, 10, 2, hairLight);
+                px(7, 6, 3, 16, hairMain);
+                px(22, 6, 3, 16, hairMain);
+                px(8, 17, 2, 6, hairLight);
+                px(22, 17, 2, 6, hairLight);
+              }
+            };
+
+            if (tier === 1) {
+              drawRoundedHead('#f5c49e', '#f5d142', '#ffe875', 'boy');
+              px(8, 20, 16, 9, '#d93829');
+              px(13, 20, 6, 5, '#ff7b66');
+            } else if (tier === 2) {
+              drawRoundedHead('#f5c49e', '#c9932c', '#e6b84c', 'mom');
+              px(8, 20, 16, 9, '#b82518');
+              px(12, 19, 8, 3, '#f5c49e');
+              px(13, 23, 6, 4, '#ff9482');
+            } else if (tier === 3) {
+              drawRoundedHead('#f2be96', '#cbd5e1', '#f1f5f9', 'grandma');
+              px(8, 20, 16, 9, '#7f1d1d');
+              px(12, 19, 8, 2, '#f8fafc');
+              px(13, 22, 6, 5, '#fca5a5');
+            } else if (tier === 4) {
+              drawRoundedHead('#f7c9a6', '#f5d142', '#fff099', 'sister');
+              px(9, 20, 14, 9, '#e11d48');
+              px(12, 19, 8, 4, '#f7c9a6');
+              px(13, 14, 6, 1, '#e11d48');
+            } else {
+              drawRoundedHead('#f7c9a6', '#fde047', '#fef9c3', 'cousin');
+              px(9, 20, 14, 9, '#be123c');
+              px(11, 19, 10, 4, '#f7c9a6');
+              px(13, 14, 6, 1, '#be123c');
+              px(14, 20, 4, 1, '#ffd166');
+            }
+
+            px(24, 16, 3, 6, '#e83b27');
+            px(25, 14, 2, 2, '#45a836');
+          });
+        } else if (id === 'carlos') {
+          url = createPixelArt32((px) => {
+            px(10, 4, 12, 3, '#382518');
+            px(11, 6, 10, 10, '#f5c29b');
+            px(10, 8, 12, 6, '#f5c29b');
+            px(12, 9, 2, 2, '#111111');
+            px(18, 9, 2, 2, '#111111');
+            px(14, 13, 4, 1, '#a64d3c');
+            px(14, 16, 4, 2, '#f5c29b');
+            px(8, 18, 16, 11, '#e65c19');
+            px(7, 20, 18, 9, '#e65c19');
+            px(12, 19, 8, 6, '#ff944d');
+          });
+        } else if (id === 'upg_carlos_1') {
+          url = createPixelArt32((px) => {
+            px(11, 3, 10, 3, '#2b1b12');
+            px(11, 5, 10, 9, '#f5c29b');
+            px(10, 7, 12, 5, '#f5c29b');
+            px(13, 7, 2, 2, '#111111');
+            px(18, 7, 2, 2, '#111111');
+            px(14, 11, 4, 1, '#a64d3c');
+            px(8, 15, 14, 12, '#e65c19');
+            px(7, 17, 15, 10, '#e65c19');
+            px(21, 15, 7, 3, '#f5c29b');
+            px(26, 14, 3, 2, '#ffd166');
+          });
+        } else if (id === 'upg_carlos_2') {
+          url = createPixelArt32((px) => {
+            px(6, 7, 8, 18, '#1a1a1a');
+            px(7, 6, 6, 1, '#cfd6e0');
+            px(7, 25, 6, 1, '#cfd6e0');
+            px(7, 10, 6, 9, '#e62e25');
+            px(9, 12, 2, 5, '#ffd166');
+            px(18, 8, 8, 18, '#0f5298');
+            px(19, 7, 6, 1, '#cfd6e0');
+            px(19, 26, 6, 1, '#cfd6e0');
+            px(19, 11, 6, 9, '#2ec4b6');
+            px(21, 13, 2, 5, '#ffffff');
+          });
+        } else if (id === 'upg_carlos_3') {
+          url = createPixelArt32((px) => {
+            px(6, 5, 20, 22, '#f5f0e6');
+            px(6, 5, 20, 6, '#5c1a6b');
+            px(10, 3, 2, 4, '#d4af37');
+            px(20, 3, 2, 4, '#d4af37');
+            px(15, 13, 2, 11, '#5c1a6b');
+            px(11, 16, 10, 2, '#5c1a6b');
+            px(8, 13, 2, 2, '#b82518');
+            px(22, 13, 2, 2, '#b82518');
+          });
+        } else if (id === 'upg_carlos_4') {
+          url = createPixelArt32((px) => {
+            px(13, 3, 6, 26, '#8c6239');
+            px(10, 10, 12, 12, '#d4af37');
+            px(11, 11, 10, 10, '#fff3b0');
+            px(12, 12, 8, 8, '#1b263b');
+            px(15, 13, 2, 4, '#ffd166');
+            px(16, 16, 3, 1, '#ffd166');
+          });
+        } else if (id === 'upg_carlos_5') {
+          url = createPixelArt32((px) => {
+            px(14, 3, 2, 3, '#d9e2ec');
+            px(17, 4, 2, 3, '#bcccdc');
+            px(13, 7, 3, 2, '#f0f4f8');
+            px(12, 9, 1, 6, '#d4af37');
+            px(19, 9, 1, 6, '#d4af37');
+            px(10, 15, 12, 3, '#f2c14e');
+            px(11, 18, 10, 6, '#d4af37');
+            px(13, 19, 6, 2, '#ff6b35');
+            px(13, 24, 6, 3, '#b08922');
+          });
+        } else if (id === 'boligrafos') {
+          url = createPixelArt32((px) => {
+            px(14, 3, 4, 4, '#b81d13');
+            px(15, 2, 2, 2, '#e02f24');
+            px(13, 7, 6, 17, '#d9261c');
+            px(14, 7, 2, 17, '#ff6359');
+            px(18, 8, 2, 8, '#99160e');
+            px(13, 24, 6, 3, '#d4af37');
+            px(15, 27, 2, 3, '#1c1c1c');
+          });
+        } else if (id === 'jose') {
+          url = createPixelArt32((px) => {
+            px(10, 4, 12, 3, '#2b1b12');
+            px(10, 6, 12, 10, '#f2be96');
+            px(9, 8, 14, 6, '#f2be96');
+            px(11, 9, 3, 3, '#ffffff');
+            px(18, 9, 3, 3, '#ffffff');
+            px(12, 10, 1, 2, '#111111');
+            px(19, 10, 1, 2, '#111111');
+            px(13, 14, 6, 1, '#8f3d2e');
+            px(14, 16, 4, 2, '#f2be96');
+            px(8, 18, 16, 11, '#245299');
+            px(7, 20, 18, 9, '#245299');
+            px(11, 18, 10, 5, '#427ad1');
+          });
+        } else if (id === 'upg_jose_1') {
+          url = createPixelArt32((px) => {
+            px(9, 4, 2, 6, '#ff4d6d');
+            px(6, 10, 8, 16, '#ffb3c1');
+            px(7, 12, 6, 13, '#ff758f');
+            px(6, 9, 8, 2, '#ffffff');
+            px(17, 11, 9, 15, '#ff9f1c');
+            px(18, 13, 7, 12, '#ffbf69');
+            px(23, 8, 3, 3, '#52b788');
+          });
+        } else if (id === 'upg_jose_2') {
+          url = createPixelArt32((px) => {
+            px(6, 5, 14, 20, '#184eb8');
+            px(7, 6, 12, 18, '#2563eb');
+            px(8, 9, 10, 5, '#ffd166');
+            px(9, 10, 8, 3, '#d9261c');
+            px(18, 17, 8, 8, '#d99b52');
+            px(20, 19, 2, 2, '#3d2212');
+            px(23, 21, 2, 2, '#3d2212');
+            px(14, 21, 6, 6, '#e6ae65');
+            px(16, 23, 1, 1, '#3d2212');
+          });
+        } else if (id === 'upg_jose_3') {
+          url = createPixelArt32((px) => {
+            px(7, 4, 18, 16, '#ffe600');
+            px(9, 6, 2, 2, '#c9b400');
+            px(21, 7, 2, 2, '#c9b400');
+            px(10, 9, 4, 4, '#ffffff');
+            px(18, 9, 4, 4, '#ffffff');
+            px(11, 10, 2, 2, '#1d6fa5');
+            px(19, 10, 2, 2, '#1d6fa5');
+            px(12, 15, 8, 2, '#d9261c');
+            px(14, 15, 1, 2, '#ffffff');
+            px(17, 15, 1, 2, '#ffffff');
+            px(7, 20, 18, 3, '#ffffff');
+            px(15, 20, 2, 3, '#d9261c');
+            px(7, 23, 18, 4, '#7f4f24');
+          });
+        } else if (id === 'upg_jose_4') {
+          url = createPixelArt32((px) => {
+            px(11, 4, 10, 17, '#ffffff');
+            px(12, 5, 8, 15, '#e0fbfc');
+            px(12, 8, 8, 6, '#38b000');
+            px(14, 10, 4, 2, '#ffffff');
+            px(13, 21, 6, 5, '#0077b6');
+            px(15, 26, 2, 2, '#90e0ef');
+          });
+        } else if (id === 'upg_jose_5') {
+          url = createPixelArt32((px) => {
+            px(8, 6, 2, 9, '#ff758f');
+            px(22, 6, 2, 9, '#ff758f');
+            px(5, 15, 10, 8, '#ff4d6d');
+            px(6, 16, 8, 6, '#ff8fa3');
+            px(17, 15, 10, 8, '#ff4d6d');
+            px(18, 16, 8, 6, '#ff8fa3');
+            px(15, 18, 2, 3, '#c9184a');
+            px(15, 16, 2, 2, '#ffffff');
+          });
+        } else if (id === 'mario') {
+          url = createPixelArt32((px) => {
+            px(9, 4, 14, 3, '#5c381e');
+            px(10, 6, 12, 10, '#f5c7a3');
+            px(9, 8, 14, 6, '#f5c7a3');
+            px(11, 9, 4, 3, '#111111');
+            px(17, 9, 4, 3, '#111111');
+            px(15, 10, 2, 1, '#111111');
+            px(13, 14, 6, 1, '#9c4b3b');
+            px(14, 16, 4, 2, '#f5c7a3');
+            px(8, 18, 16, 11, '#2e7d32');
+            px(7, 20, 18, 9, '#2e7d32');
+            px(12, 20, 8, 5, '#66bb6a');
+          });
+        } else if (id === 'upg_mario_1') {
+          url = createPixelArt32((px) => {
+            px(6, 14, 20, 9, '#5c677d');
+            px(8, 11, 16, 4, '#7d8597');
+            px(11, 11, 1, 12, '#33415c');
+            px(15, 11, 1, 12, '#33415c');
+            px(19, 11, 1, 12, '#33415c');
+            px(4, 13, 3, 2, '#979dac');
+            px(8, 23, 2, 3, '#33415c');
+            px(13, 23, 2, 3, '#33415c');
+            px(18, 23, 2, 3, '#33415c');
+            px(22, 23, 2, 3, '#33415c');
+          });
+        } else if (id === 'upg_mario_2') {
+          url = createPixelArt32((px) => {
+            px(9, 7, 6, 6, '#caf0f8');
+            px(17, 7, 6, 6, '#caf0f8');
+            px(12, 13, 8, 10, '#6c757d');
+            px(14, 14, 4, 8, '#adb5bd');
+            px(13, 9, 6, 3, '#ff4d6d');
+            px(15, 23, 2, 5, '#212529');
+            px(9, 19, 3, 5, '#212529');
+            px(20, 19, 3, 5, '#212529');
+          });
+        } else if (id === 'upg_mario_3') {
+          url = createPixelArt32((px) => {
+            px(12, 4, 8, 4, '#ffd166');
+            px(12, 3, 2, 2, '#ffd166');
+            px(15, 3, 2, 2, '#ffd166');
+            px(18, 3, 2, 2, '#ffd166');
+            px(7, 9, 7, 6, '#90e0ef');
+            px(18, 9, 7, 6, '#90e0ef');
+            px(12, 12, 8, 11, '#495057');
+            px(15, 23, 2, 6, '#212529');
+            px(8, 18, 4, 6, '#212529');
+            px(20, 18, 4, 6, '#212529');
+          });
+        } else if (id === 'upg_mario_4') {
+          url = createPixelArt32((px) => {
+            const cols = ['#f72585', '#b5179e', '#7209b7', '#ff4d6d'];
+            for (let i = 0; i < 4; i++) {
+              const x = 4 + i * 6;
+              px(x + 1, 9, 3, 3, '#f5c29b');
+              px(x, 12, 5, 11, cols[i]);
+            }
+            px(11, 3, 10, 4, '#ffd166');
+          });
+        } else if (id === 'upg_mario_5') {
+          url = createPixelArt32((px) => {
+            px(5, 11, 22, 10, '#2b2d42');
+            px(4, 14, 5, 9, '#2b2d42');
+            px(23, 14, 5, 9, '#2b2d42');
+            px(8, 14, 2, 6, '#edf2f4');
+            px(6, 16, 6, 2, '#edf2f4');
+            px(21, 14, 2, 2, '#ef233c');
+            px(23, 16, 2, 2, '#ffd166');
+            px(19, 16, 2, 2, '#06d6a0');
+          });
+        } else if (id === 'alejandro') {
+          url = createPixelArt32((px) => {
+            px(11, 4, 2, 4, '#ffffff');
+            px(15, 3, 2, 5, '#ffffff');
+            px(20, 4, 2, 4, '#ffffff');
+            px(7, 11, 18, 15, '#4a4e54');
+            px(8, 12, 16, 13, '#686e78');
+            px(5, 13, 2, 4, '#2d3033');
+            px(25, 13, 2, 4, '#2d3033');
+            px(8, 10, 16, 3, '#e8b954');
+            px(10, 10, 3, 2, '#d9483b');
+            px(17, 10, 4, 2, '#f5e298');
+          });
+        } else if (id === 'upg_ale_1') {
+          url = createPixelArt32((px) => {
+            px(6, 17, 20, 9, '#8d5524');
+            px(8, 25, 16, 2, '#5c3614');
+            px(8, 12, 16, 6, '#f4d58d');
+            px(10, 9, 12, 4, '#ffe8a3');
+            px(11, 11, 2, 2, '#d4a359');
+            px(16, 10, 2, 2, '#d4a359');
+            px(19, 13, 2, 2, '#d4a359');
+          });
+        } else if (id === 'upg_ale_2') {
+          url = createPixelArt32((px) => {
+            px(6, 9, 20, 14, '#c1121f');
+            px(8, 10, 16, 11, '#e63946');
+            px(10, 12, 4, 1, '#fff0f3');
+            px(15, 14, 5, 1, '#fff0f3');
+            px(9, 16, 6, 1, '#fff0f3');
+            px(16, 18, 4, 1, '#fff0f3');
+            px(14, 14, 4, 4, '#f8f9fa');
+          });
+        } else if (id === 'upg_ale_3') {
+          url = createPixelArt32((px) => {
+            px(11, 6, 5, 3, '#2b2d42');
+            px(10, 9, 7, 7, '#1a1a1d');
+            px(8, 11, 2, 2, '#495057');
+            px(10, 15, 14, 9, '#111113');
+            px(13, 16, 8, 5, '#2b2d42');
+            px(14, 24, 2, 4, '#343a40');
+            px(19, 24, 2, 4, '#343a40');
+          });
+        } else if (id === 'upg_ale_4') {
+          url = createPixelArt32((px) => {
+            px(6, 9, 20, 14, '#d9777f');
+            px(6, 13, 20, 3, '#fff3f0');
+            px(6, 18, 20, 3, '#f7cad0');
+            px(9, 6, 2, 4, '#f8f9fa');
+            px(15, 6, 2, 4, '#f8f9fa');
+            px(21, 6, 2, 4, '#f8f9fa');
+          });
+        } else if (id === 'upg_ale_5') {
+          url = createPixelArt32((px) => {
+            px(4, 14, 4, 4, '#1a1a1a');
+            px(8, 15, 6, 2, '#f5ebe0');
+            px(13, 10, 14, 12, '#800f2f');
+            px(14, 11, 11, 9, '#a4133c');
+            px(16, 13, 6, 4, '#ffccd5');
+          });
+        } else if (id === 'gavino') {
+          url = createPixelArt32((px) => {
+            px(11, 3, 10, 4, '#1e293b');
+            px(8, 6, 16, 2, '#0f172a');
+            px(10, 8, 12, 10, '#f0bc94');
+            px(9, 10, 14, 6, '#f0bc94');
+            px(11, 11, 2, 2, '#111111');
+            px(19, 11, 2, 2, '#111111');
+            px(9, 11, 1, 6, '#334155');
+            px(22, 11, 1, 6, '#334155');
+            px(11, 16, 10, 3, '#334155');
+            px(14, 15, 4, 1, '#9c4b3b');
+            px(8, 19, 16, 10, '#1e293b');
+            px(7, 21, 18, 8, '#1e293b');
+            px(11, 19, 10, 9, '#f8fafc');
+            px(12, 19, 2, 9, '#1d4ed8');
+            px(18, 19, 2, 9, '#1d4ed8');
+          });
+        } else if (id === 'upg_gav_1') {
+          url = createPixelArt32((px) => {
+            px(11, 5, 10, 3, '#1d4ed8');
+            px(10, 8, 12, 10, '#f0bc94');
+            px(9, 10, 14, 6, '#f0bc94');
+            px(11, 11, 2, 2, '#111111');
+            px(19, 11, 2, 2, '#111111');
+            px(13, 15, 6, 1, '#7a3b2e');
+            px(8, 19, 16, 10, '#f8fafc');
+            px(7, 21, 18, 8, '#f8fafc');
+            px(11, 19, 2, 10, '#1d4ed8');
+            px(19, 19, 2, 10, '#1d4ed8');
+          });
+        } else if (id === 'upg_gav_2') {
+          url = createPixelArt32((px) => {
+            px(10, 5, 9, 3, '#1e293b');
+            px(9, 8, 11, 9, '#f0bc94');
+            px(8, 10, 13, 5, '#f0bc94');
+            px(11, 10, 2, 2, '#111111');
+            px(17, 10, 2, 2, '#111111');
+            px(13, 14, 4, 2, '#7f1d1d');
+            px(7, 18, 15, 11, '#1e3a5f');
+            px(6, 20, 17, 9, '#1e3a5f');
+            px(11, 18, 7, 10, '#f8fafc');
+            px(24, 6, 2, 7, '#ffd166');
+            px(22, 11, 4, 3, '#ffd166');
+          });
+        } else if (id === 'upg_gav_3') {
+          url = createPixelArt32((px) => {
+            px(11, 3, 10, 4, '#0f172a');
+            px(7, 7, 18, 2, '#020617');
+            px(10, 9, 12, 8, '#f0bc94');
+            px(9, 10, 14, 6, '#f0bc94');
+            px(11, 11, 2, 2, '#111111');
+            px(19, 11, 2, 2, '#111111');
+            px(9, 11, 1, 7, '#1e293b');
+            px(22, 11, 1, 7, '#1e293b');
+            px(11, 16, 10, 5, '#1e293b');
+            px(8, 21, 16, 8, '#0f172a');
+            px(7, 22, 18, 7, '#0f172a');
+            px(13, 21, 6, 8, '#f8fafc');
+          });
+        } else if (id === 'upg_gav_4') {
+          url = createPixelArt32((px) => {
+            px(11, 2, 10, 5, '#1e293b');
+            px(11, 6, 10, 2, '#ffd166');
+            px(7, 8, 18, 2, '#0f172a');
+            px(10, 10, 12, 7, '#f0bc94');
+            px(9, 11, 14, 5, '#f0bc94');
+            px(11, 12, 2, 2, '#111111');
+            px(19, 12, 2, 2, '#111111');
+            px(10, 16, 12, 6, '#f1f5f9');
+            px(8, 22, 16, 7, '#1e3a5f');
+            px(7, 23, 18, 6, '#1e3a5f');
+            px(13, 22, 6, 7, '#ffd166');
+          });
+        } else if (id === 'upg_gav_5') {
+          url = createPixelArt32((px) => {
+            const xs = [3, 12, 21];
+            for (const x of xs) {
+              px(x + 2, 6, 4, 3, '#0f172a');
+              px(x, 9, 8, 2, '#020617');
+              px(x + 1, 11, 6, 5, '#f0bc94');
+              px(x + 1, 16, 6, 4, '#334155');
+              px(x + 1, 20, 6, 8, '#1e293b');
+              px(x, 21, 8, 7, '#1e293b');
+            }
+          });
+        } else if (id.startsWith('upg_boli_')) {
+          const idx = id.split('_')[2];
+          url = createPixelArt32((px) => {
+            if (idx === '1') {
+              px(12, 3, 8, 3, '#d93829');
+              px(12, 6, 8, 2, '#b8bec7');
+              px(12, 8, 2, 14, '#1a1a1a');
+              px(14, 8, 4, 14, '#f5c416');
+              px(18, 8, 2, 14, '#1a1a1a');
+              px(13, 22, 6, 3, '#e6b88a');
+              px(14, 25, 4, 2, '#d49e6a');
+              px(15, 27, 2, 3, '#262626');
+            } else if (idx === '2') {
+              px(14, 3, 4, 3, '#cfd6e0');
+              px(13, 6, 6, 17, '#246bce');
+              px(14, 6, 2, 17, '#63a4ff');
+              px(19, 8, 2, 8, '#b0b8c4');
+              px(13, 23, 6, 3, '#9aa3b0');
+              px(15, 26, 2, 4, '#30343b');
+            } else if (idx === '3') {
+              px(13, 4, 6, 20, '#1e8c3a');
+              px(14, 4, 2, 20, '#52d673');
+              px(14, 24, 4, 3, '#d4af37');
+              px(15, 27, 2, 3, '#0f4d1e');
+            } else if (idx === '4') {
+              px(13, 4, 6, 20, '#1c1c21');
+              px(14, 4, 2, 20, '#52525e');
+              px(14, 24, 4, 3, '#c0c5ce');
+              px(15, 27, 2, 3, '#000000');
+            } else {
+              px(13, 4, 6, 20, '#184eb8');
+              px(14, 4, 2, 20, '#5992ff');
+              px(14, 24, 4, 3, '#ffd166');
+              px(15, 27, 2, 3, '#0b2866');
+            }
+          });
+        } else if (id.startsWith('flavor_')) {
+          const hash = id.split('').reduce((a, c) => a + c.charCodeAt(0), 0);
+          const palettes = [
+            ['#1d4ed8', '#ffd166'],
+            ['#8c5327', '#d99b52'],
+            ['#c94a2c', '#4ecdc4'],
+            ['#f5b700', '#2b59c3'],
+            ['#4b6043', '#75975e'],
+            ['#262626', '#d93829'],
+            ['#b82929', '#5c3a21'],
+            ['#529e38', '#f2c14e'],
+            ['#1d6fa5', '#70d6ff'],
+            ['#f4a226', '#2b2118'],
+            ['#596275', '#f7d794'],
+            ['#e5e5e5', '#6a994e'],
+            ['#2d6a4f', '#74c69d'],
+            ['#1f1f1f', '#e07a5f'],
+            ['#f8f9fa', '#90e0ef'],
+            ['#343a40', '#ff6b35'],
+            ['#bc6c25', '#dda15e'],
+            ['#457b9d', '#e63946'],
+            ['#606c38', '#bc4749'],
+            ['#e63946', '#52b788']
+          ];
+          const [hatCol, accentCol] = palettes[hash % palettes.length];
+          url = createPixelArt32((px) => {
+            drawBaseMengutibo(px);
+            px(8, 3, 16, 3, hatCol);
+            px(10, 1, 12, 3, hatCol);
+            px(10, 4, 12, 1, accentCol);
+          });
+        } else {
+          const hash = id.split('').reduce((a, c) => a + c.charCodeAt(0), 0);
+          const cols = ['#e0533c', '#f2a638', '#4cb963', '#3c8ce0', '#9b5de5', '#f15bb5'];
+          const c1 = cols[hash % cols.length];
+          const c2 = cols[(hash + 2) % cols.length];
+          url = createPixelArt32((px) => {
+            drawBaseMengutibo(px);
+            px(6, 23, 20, 6, c1);
+            px(8, 24, 16, 3, c2);
+          });
+        }
+
+        spriteCache[id] = url;
+        return url;
+      }
+
+      function getImageObj(id) {
+        if (imageObjCache[id]) return imageObjCache[id];
+        const img = new Image();
+        img.src = getSprite(id);
+        imageObjCache[id] = img;
+        return img;
+      }
+
+      // =========================================================================
+      // DATOS DEL JUEGO: EDIFICIOS, MEJORAS Y LOGROS
+      // =========================================================================
+      const BUILDINGS = [
+        {
+          id: 'boligrafos',
+          name: 'Bolígrafos rojos',
+          desc: 'Bolígrafos robados durante 2º, 3º y 4º de la ESO para crear Mengutibos a partir de la avaricia de los ladrones y la pérdida de las víctimas.',
+          baseCost: 15,
+          baseCps: 0.1
+        },
+        {
+          id: 'jose',
+          name: 'José Antonio',
+          desc: 'José Antonio está dispuesto a dedicar su vida a Mengutibo. Si no te sirve uno, duplícalo y desecha el defectuoso.',
+          baseCost: 100,
+          baseCps: 1
+        },
+        {
+          id: 'mario',
+          name: 'Mario',
+          desc: 'Crea Mengutibos a partir de la nostalgia y el legado de viejas mascotas.',
+          baseCost: 1100,
+          baseCps: 8
+        },
+        {
+          id: 'alejandro',
+          name: 'Alejandro',
+          desc: 'Alimenta a los Mengutibos con su delicioso Puchero',
+          baseCost: 12000,
+          baseCps: 47
+        },
+        {
+          id: 'gavino',
+          name: 'Pablo Gaviño',
+          desc: 'Un judío que contribuye a la producción. Obviamente espera beneficios.',
+          baseCost: 130000,
+          baseCps: 260
+        }
+      ];
+
+      const NORMAL_UPGRADES = [
+        // Mojo Picón (5) - Escalado equivalente a las mejoras de gatitos de Cookie Clicker
+        { id: 'upg_mojo_1', name: 'Guillermos', desc: 'Te preguntarás para qué el mojo picón. Guille sabe la respuesta', effectText: 'Convierte tu porcentaje de Leche en multiplicador.', price: 9000, type: 'mojo', tier: 1, reqAch: 13 },
+        { id: 'upg_mojo_2', name: 'Madres de Guillermos', desc: 'Producen tantos Mengutibos como Mojo Picón.', effectText: 'Aumenta el multiplicador acumulado de la Leche', price: 9000000, type: 'mojo', tier: 2, reqAch: 25 },
+        { id: 'upg_mojo_3', name: 'Madres de madres Guillermos', desc: 'Mejor calan los sabores de un ajo arrugado y un vinagre maduro.', effectText: 'Aumenta el multiplicador acumulado de la Leche', price: 9000000000, type: 'mojo', tier: 3, reqAch: 35 },
+        { id: 'upg_mojo_4', name: 'Elena', desc: 'Es una máquina en persona.', effectText: 'Aumenta el multiplicador acumulado de la Leche', price: 9000000000000, type: 'mojo', tier: 4, reqAch: 44 },
+        { id: 'upg_mojo_5', name: 'Estrella', desc: 'Es el Mojo Picón en persona.', effectText: 'Aumenta el multiplicador acumulado de la Leche', price: 9000000000000000, type: 'mojo', tier: 5, reqAch: 50 },
+
+        // Carlos (clicks) (5)
+        { id: 'upg_carlos_1', name: 'Carlos Pulido de apoyo', desc: 'Un Charlipú tocapelotas que te ayudará a fabricar Mengutibos solamente tocando los huevos.', effectText: 'Suma un +1% de tus CpS globales al valor de cada clic manual.', price: 50000, type: 'carlos', reqClicks: 1000 },
+        { id: 'upg_carlos_2', name: 'Eneryetis y Freshyetis', desc: 'Revolucionan los Charlipús, los hace más insoportables.', effectText: 'Suma un +1% de tus CpS globales al valor de cada clic manual.', price: 5000000, type: 'carlos', reqClicks: 100000 },
+        { id: 'upg_carlos_3', name: 'Calendario regresivo motivador de la Semana Santa', desc: 'Para motivarlos, siempre piensan en esto.', effectText: 'Suma un +1% de tus CpS globales al valor de cada clic manual.', price: 500000000, type: 'carlos', reqClicks: 10000000 },
+        { id: 'upg_carlos_4', name: 'Ropa cara y relojes', desc: 'Mejoran su bienestar y calman sus deseos ricachones.', effectText: 'Suma un +1% de tus CpS globales al valor de cada clic manual.', price: 50000000000, type: 'carlos', reqClicks: 1000000000 },
+        { id: 'upg_carlos_5', name: 'Incienso', desc: '¿Eres más de la Esperanza de Triana o de la Macarena? Él de la Soledad de San Buenaventura.', effectText: 'Suma un +1% de tus CpS globales al valor de cada clic manual.', price: 5000000000000, type: 'carlos', reqClicks: 100000000000 },
+
+        // Bolígrafos rojos (5)
+        { id: 'upg_boli_1', name: 'Lápices', desc: 'Lápices Noris Hb, los clásicos negros y amarillos de culo rojo.', effectText: 'Duplica su eficacia (+100%)', price: 100, type: 'building', building: 'boligrafos', reqCount: 1 },
+        { id: 'upg_boli_2', name: 'Portaminas', desc: 'Lápices sofisticados.', effectText: 'Duplica su eficacia (+100%)', price: 500, type: 'building', building: 'boligrafos', reqCount: 1 },
+        { id: 'upg_boli_3', name: 'Bolígrafos verdes', desc: 'Por fin les van a dar uso.', effectText: 'Duplica su eficacia (+100%)', price: 10000, type: 'building', building: 'boligrafos', reqCount: 10 },
+        { id: 'upg_boli_4', name: 'Bolígrafos negros', desc: 'Una vez que se dibujen, no se podrán borrar.', effectText: 'Añade +0,1 galletas a los clics y cursores por cada edificio que no sea un cursor.', price: 100000, type: 'building', building: 'boligrafos', reqCount: 25 },
+        { id: 'upg_boli_5', name: 'Bolígrafos azules', desc: 'Pack de bolígrafos BIC, calidad suprema, Mengutibos supremos.', effectText: 'Multiplica por 5 el efecto de Mil dedos', price: 10000000, type: 'building', building: 'boligrafos', reqCount: 100 },
+
+        // José Antonio (5)
+        { id: 'upg_jose_1', name: 'Batidos y zumos', desc: 'Nunca pueden estar sedientos.', effectText: 'Duplica su eficacia (+100%)', price: 1000, type: 'building', building: 'jose', reqCount: 1 },
+        { id: 'upg_jose_2', name: 'Merienda completa', desc: 'Si pueden ser unas galletas Mini Chips Ahoy!, mejor.', effectText: 'Duplica su eficacia (+100%)', price: 5000, type: 'building', building: 'jose', reqCount: 10 },
+        { id: 'upg_jose_3', name: 'Episodios de Bob Esponja', desc: 'Estos episodios mejoran su esperanza de vida.', effectText: 'Duplica su eficacia (+100%)', price: 50000, type: 'building', building: 'jose', reqCount: 25 },
+        { id: 'upg_jose_4', name: 'Crema para granos', desc: 'No llenan los Mengutibos de grasa. ¡Menos quejas!', effectText: 'Duplica su eficacia (+100%)', price: 5000000, type: 'building', building: 'jose', reqCount: 100 },
+        { id: 'upg_jose_5', name: 'Sujetador', desc: 'Minimiza los esfuerzos de los Jose Antonio.', effectText: 'Duplica su eficacia (+100%)', price: 500000000, type: 'building', building: 'jose', reqCount: 100 },
+
+        // Mario (5)
+        { id: 'upg_mario_1', name: 'Pera el que espera', desc: 'Una oniscidea. Para el resto, un bicho bola.', effectText: 'Duplica su eficacia (+100%)', price: 11000, type: 'building', building: 'mario', reqCount: 1 },
+        { id: 'upg_mario_2', name: 'Federica', desc: 'La esposa de Federico, la pareja de mosquito más efímera.', effectText: 'Duplica su eficacia (+100%)', price: 55000, type: 'building', building: 'mario', reqCount: 10 },
+        { id: 'upg_mario_3', name: 'Federico', desc: 'El patriarca del federiquismo.', effectText: 'Duplica su eficacia (+100%)', price: 550000, type: 'building', building: 'mario', reqCount: 25 },
+        { id: 'upg_mario_4', name: '4 p*utas', desc: '¡Son cuatro al precio de una!', effectText: 'Cuadriplica su eficacia (+300%)', price: 55000000, type: 'building', building: 'mario', reqCount: 100 },
+        { id: 'upg_mario_5', name: 'Pecador', desc: 'Puede que hagan las cosas mal, pero estarán viciados a hacerlo bien.', effectText: 'Duplica su eficacia (+100%)', price: 5500000000, type: 'building', building: 'mario', reqCount: 100 },
+
+        // Alejandro (5)
+        { id: 'upg_ale_1', name: 'Garbanzos Lechosos Andaluz Premium Ecológicos con Denominación', desc: 'Mejora la calidad del puchero con estos garbanzos andaluces.', effectText: 'Duplica su eficacia (+100%)', price: 120000, type: 'building', building: 'alejandro', reqCount: 1 },
+        { id: 'upg_ale_2', name: 'Jarrete de Wagyu Japonés', desc: 'Sabor rico, profundo y mantequilloso, acompañado de un aroma ligeramente dulce y un toque característico a umami.', effectText: 'Duplica su eficacia (+100%)', price: 600000, type: 'building', building: 'alejandro', reqCount: 10 },
+        { id: 'upg_ale_3', name: 'Pollo Ayam Indonesio', desc: 'Ni pintará el puchero de negro ni es contagioso. Es negro, sí, pero no virulento.', effectText: 'Duplica su eficacia (+100%)', price: 6000000, type: 'building', building: 'alejandro', reqCount: 25 },
+        { id: 'upg_ale_4', name: 'Tocino y costilla de Cerdo Ibérico Puro de Bellota con Denominación de Origen', desc: 'El puchero más caro posible es sobre todo español.', effectText: 'Duplica su eficacia (+100%)', price: 600000000, type: 'building', building: 'alejandro', reqCount: 100 },
+        { id: 'upg_ale_5', name: 'Hueso de Jamón Ibérico de Bellota 100%', desc: 'Las sobras de Navidad.', effectText: 'Duplica su eficacia (+100%)', price: 60000000000, type: 'building', building: 'alejandro', reqCount: 100 },
+
+        // Pablo Gaviño (5)
+        { id: 'upg_gav_1', name: 'Gaviño Minyán', desc: 'Todos respetamos su religión, ¿verdad?', effectText: 'Duplica su eficacia (+100%)', price: 1300000, type: 'building', building: 'gavino', reqCount: 1 },
+        { id: 'upg_gav_2', name: 'Gaviño Jazán', desc: 'Pablo, mejor cállate, no vales para cantar.', effectText: 'Duplica su eficacia (+100%)', price: 6500000, type: 'building', building: 'gavino', reqCount: 10 },
+        { id: 'upg_gav_3', name: 'Gaviño Rabino', desc: 'Pablo, estás llegando demasiado lejos, ¿no crees?', effectText: 'Duplica su eficacia (+100%)', price: 65000000, type: 'building', building: 'gavino', reqCount: 25 },
+        { id: 'upg_gav_4', name: 'Gran Rabino', desc: 'Eres como un obispo, ¿no? Dudo que haya sinagogas en Sevilla.', effectText: 'Duplica su eficacia (+100%)', price: 6500000000, type: 'building', building: 'gavino', reqCount: 100 },
+        { id: 'upg_gav_5', name: 'Tribunal de Gaviños Rabino', desc: '¿En serio Pablos? ¿Cómo que ahora sois tres?', effectText: 'Triplica su eficacia (+200%)', price: 650000000000, type: 'building', building: 'gavino', reqCount: 100 }
+      ];
+
+      // 20 Mengutibos de sabores (7 YMCA +1% y 13 Primer sector +2%) con escalado de Cookie Clicker
+      const FLAVOR_UPGRADES = [
+        // YMCA (+1%) - 7 unidades
+        { id: 'flavor_ymca_1', name: 'Mengutibo Policía', category: 'YMCA', mult: 0.01, price: 999999, reqBaked: 50000 },
+        { id: 'flavor_ymca_2', name: 'Mengutibo Vaquero', category: 'YMCA', mult: 0.01, price: 4999999, reqBaked: 250000 },
+        { id: 'flavor_ymca_3', name: 'Mengutibo Indio', category: 'YMCA', mult: 0.01, price: 9999999, reqBaked: 500000 },
+        { id: 'flavor_ymca_4', name: 'Mengutibo Electricista', category: 'YMCA', mult: 0.01, price: 49999999, reqBaked: 2500000 },
+        { id: 'flavor_ymca_5', name: 'Mengutibo Militar', category: 'YMCA', mult: 0.01, price: 99999999, reqBaked: 5000000 },
+        { id: 'flavor_ymca_6', name: 'Mengutibo Motero', category: 'YMCA', mult: 0.01, price: 499999999, reqBaked: 25000000 },
+        { id: 'flavor_ymca_7', name: 'Mengutibo Leñador', category: 'YMCA', mult: 0.01, price: 999999999, reqBaked: 50000000 },
+
+        // Primer sector (+2%) - 13 unidades
+        { id: 'flavor_ps_1', name: 'Mengutibo Granjero', category: 'Primer sector', mult: 0.02, price: 5000000000, reqBaked: 250000000 },
+        { id: 'flavor_ps_2', name: 'Mengutibo Pesquero', category: 'Primer sector', mult: 0.02, price: 10000000000, reqBaked: 500000000 },
+        { id: 'flavor_ps_3', name: 'Mengutibo Apicultor', category: 'Primer sector', mult: 0.02, price: 25000000000, reqBaked: 1250000000 },
+        { id: 'flavor_ps_4', name: 'Mengutibo Minero', category: 'Primer sector', mult: 0.02, price: 50000000000, reqBaked: 2500000000 },
+        { id: 'flavor_ps_5', name: 'Mengutibo Pastor', category: 'Primer sector', mult: 0.02, price: 100000000000, reqBaked: 5000000000 },
+        { id: 'flavor_ps_6', name: 'Mengutibo Silvicultor', category: 'Primer sector', mult: 0.02, price: 250000000000, reqBaked: 12500000000 },
+        { id: 'flavor_ps_7', name: 'Mengutibo Petrolero', category: 'Primer sector', mult: 0.02, price: 500000000000, reqBaked: 25000000000 },
+        { id: 'flavor_ps_8', name: 'Mengutibo Salinero', category: 'Primer sector', mult: 0.02, price: 750000000000, reqBaked: 37500000000 },
+        { id: 'flavor_ps_9', name: 'Mengutibo Carbonero', category: 'Primer sector', mult: 0.02, price: 1000000000000, reqBaked: 50000000000 },
+        { id: 'flavor_ps_10', name: 'Mengutibo Jornalero', category: 'Primer sector', mult: 0.02, price: 2500000000000, reqBaked: 125000000000 },
+        { id: 'flavor_ps_11', name: 'Mengutibo Sondista', category: 'Primer sector', mult: 0.02, price: 5000000000000, reqBaked: 250000000000 },
+        { id: 'flavor_ps_12', name: 'Mengutibo Cazador', category: 'Primer sector', mult: 0.02, price: 7500000000000, reqBaked: 375000000000 },
+        { id: 'flavor_ps_13', name: 'Mengutibo Fruticultor', category: 'Primer sector', mult: 0.02, price: 10000000000000, reqBaked: 500000000000 }
+      ].map(f => ({
+        ...f,
+        type: 'flavor',
+        desc: '',
+        effectText: `Producción de Mengutibos +${Math.round(f.mult * 100)}%.`
+      }));
+
+      const ALL_UPGRADES = [...NORMAL_UPGRADES, ...FLAVOR_UPGRADES];
+
+      // =========================================================================
+      // TODOS LOS LOGROS DE TU TABLA (52 LOGROS VERBATIM)
+      // =========================================================================
+      const ACHIEVEMENTS = [
+        // Bolis rojos
+        { id: 'ach_boli_1', name: 'Tu primer bolígrafo robado', reqText: 'Posee 1 Bolígrafo rojo.', desc: 'Ni se han percatado.', check: s => s.buildings.boligrafos >= 1 },
+        { id: 'ach_boli_10', name: 'Pícaro', reqText: 'Posee 10 Bolígrafos rojos.', desc: '¿Lo consideras rutina?', check: s => s.buildings.boligrafos >= 10 },
+        { id: 'ach_boli_25', name: 'Robos inteligentes', reqText: 'Posee 25 Bolígrafos rojos.', desc: 'Las sospechas llegan a los profesores.', check: s => s.buildings.boligrafos >= 25 },
+        { id: 'ach_boli_50', name: 'Banda criminal', reqText: 'Posee 50 Bolígrafos rojos.', desc: 'Ya no solo robas...', check: s => s.buildings.boligrafos >= 50 },
+        { id: 'ach_boli_100', name: 'Ladrón de guante blanco', reqText: 'Posee 100 Bolígrafos rojos.', desc: 'Por lo menos tienes el 100% de beneficios.', check: s => s.buildings.boligrafos >= 100 },
+        { id: 'ach_boli_150', name: 'Capo mafioso', reqText: 'Posee 150 Bolígrafos rojos.', desc: 'Capo di tutti capi, della mafia delle penne rosse.', check: s => s.buildings.boligrafos >= 150 },
+
+        // José Antonios
+        { id: 'ach_jose_1', name: 'Tu primer Jose Antonio', reqText: 'Posee 1 José Antonio.', desc: 'Al principio son fieles.', check: s => s.buildings.jose >= 1 },
+        { id: 'ach_jose_10', name: 'Despistados', reqText: 'Posee 10 José Antonios.', desc: 'Con una decena, se despistan entre ellos.', check: s => s.buildings.jose >= 10 },
+        { id: 'ach_jose_25', name: '50 pezones', reqText: 'Posee 25 José Antonios.', desc: 'Culminan los Mengutibos con una pizca de leche.', check: s => s.buildings.jose >= 25 },
+        { id: 'ach_jose_50', name: 'Ejército inservible', reqText: 'Posee 50 José Antonios.', desc: 'Aunque es poco probable que te atraquen, no podrás defenderte con Jose Antonios que solo querrán ver Bob Esponja con el intruso.', check: s => s.buildings.jose >= 50 },
+        { id: 'ach_jose_100', name: 'Josés famosos', reqText: 'Posee 100 José Antonios.', desc: '¡Tantos Jose Antonios que desbloqueas los prémium!', check: s => s.buildings.jose >= 100 },
+        { id: 'ach_jose_150', name: 'Querido Jose Antonio', reqText: 'Posee 150 José Antonios.', desc: 'Esto es una carta personal. Gracias por todo tu esfuerzo en la empresa. -Director ejecutivo.', check: s => s.buildings.jose >= 150 },
+
+        // Mario
+        { id: 'ach_mario_1', name: 'Tu primer Mario', reqText: 'Posee 1 Mario.', desc: 'Es excelente para dar una nueva imagen a la marca.', check: s => s.buildings.mario >= 1 },
+        { id: 'ach_mario_10', name: 'Nuevos ídolos', reqText: 'Posee 10 Marios.', desc: '¡Ahora no solo hay Mengutibos!', check: s => s.buildings.mario >= 10 },
+        { id: 'ach_mario_25', name: 'Creaciones creadoras', reqText: 'Posee 25 Marios.', desc: 'Las nuevas mascotas se dedican a crear Mengutibos.', check: s => s.buildings.mario >= 25 },
+        { id: 'ach_mario_50', name: 'Mengutibex', reqText: 'Posee 50 Marios.', desc: '¡Mario ha puesto a la venta una Pokédex de criaturas nuevas!', check: s => s.buildings.mario >= 50 },
+        { id: 'ach_mario_100', name: 'Mengutibo Playtime', reqText: 'Posee 100 Marios.', desc: 'Ocurren cosas extrañas en tus fábricas con tus nuevas criaturas. Pero te da igual...', check: s => s.buildings.mario >= 100 },
+        { id: 'ach_mario_150', name: 'Los Marios Perdidos', reqText: 'Posee 150 Marios.', desc: 'Nadie ha visto a los Marios y al Mario Original en mucho tiempo y, misteriosamente, se siguen produciendo. Como sigue habiendo beneficios, te da igual.', check: s => s.buildings.mario >= 150 },
+
+        // Alejandro
+        { id: 'ach_ale_1', name: 'Tu primer puchero', reqText: 'Posee 1 Alejandro.', desc: 'Ha salido bueno.', check: s => s.buildings.alejandro >= 1 },
+        { id: 'ach_ale_10', name: 'Puchero deseado', reqText: 'Posee 10 Alejandros.', desc: 'La gente te invita a su cocina a que se lo cocines.', check: s => s.buildings.alejandro >= 10 },
+        { id: 'ach_ale_25', name: 'Puchero de prestigio', reqText: 'Posee 25 Alejandros.', desc: 'No has superado a tu abuela. Todavía...', check: s => s.buildings.alejandro >= 25 },
+        { id: 'ach_ale_50', name: 'Restaurante exclusivo de pucheros', reqText: 'Posee 50 Alejandros.', desc: 'Grandes celebridades viajan para probarlo.', check: s => s.buildings.alejandro >= 50 },
+        { id: 'ach_ale_100', name: 'Cocinas industriales', reqText: 'Posee 100 Alejandros.', desc: 'Lo vendes hasta precocinado.', check: s => s.buildings.alejandro >= 100 },
+        { id: 'ach_ale_150', name: '★★★★★', reqText: 'Posee 150 Alejandros.', desc: 'El mejor puchero del mundo.', check: s => s.buildings.alejandro >= 150 },
+
+        // Gaviño
+        { id: 'ach_gav_1', name: 'Tu primer judío trabajador', reqText: 'Posee 1 Pablo Gaviño.', desc: 'Cuida bien tu caja registradora.', check: s => s.buildings.gavino >= 1 },
+        { id: 'ach_gav_10', name: 'Convención judía', reqText: 'Posee 10 Pablo Gaviños.', desc: 'Necesitas seguridad extra en tu bóveda, pero merece la pena.', check: s => s.buildings.gavino >= 10 },
+        { id: 'ach_gav_25', name: 'Trabajo los domingos', reqText: 'Posee 25 Pablo Gaviños.', desc: 'También pierdes los sábados.', check: s => s.buildings.gavino >= 25 },
+        { id: 'ach_gav_50', name: 'Sinagoga con Torá', reqText: 'Posee 50 Pablo Gaviños.', desc: 'Desde Gaviños que la limpian, hasta un Gran Rabino que dirige una comunidad: "Kehilá".', check: s => s.buildings.gavino >= 50 },
+        { id: 'ach_gav_100', name: 'Campo de concentración', reqText: 'Posee 100 Pablo Gaviños.', desc: 'Los rapas para que "no pillen piojos".', check: s => s.buildings.gavino >= 100 },
+        { id: 'ach_gav_150', name: 'Masificación judía concentrada', reqText: 'Posee 150 Pablo Gaviños.', desc: 'Pareces un pintor austriaco.', check: s => s.buildings.gavino >= 150 },
+
+        // Mejoras
+        { id: 'ach_upg_1', name: 'Esto es solo el comienzo...', reqText: 'Compra 1 mejora.', desc: 'De aquí para arriba.', check: s => s.ownedUpgrades.length >= 1 },
+        { id: 'ach_upg_10', name: '¿Ves como merecía la pena?', reqText: 'Compra 10 mejoras.', desc: '¡Tu producción por segundo es equivalente a todas las galletas que comerías en una vida!', check: s => s.ownedUpgrades.length >= 10 },
+        { id: 'ach_upg_20', name: 'Máxima calidad', reqText: 'Compra 20 mejoras.', desc: 'Cada Mengutibo es más perfecto que el anterior.', check: s => s.ownedUpgrades.length >= 20 },
+        { id: 'ach_upg_all', name: 'Todas', reqText: 'Compra todas las mejoras normales (35).', desc: 'No puedes mejorar nada más: tú mismo has creado nuevos estándares de perfección.', check: s => NORMAL_UPGRADES.every(u => s.ownedUpgrades.includes(u.id)) },
+
+        // Mengutibos dorados
+        { id: 'ach_gold_1', name: 'Mengutibo dorado', reqText: 'Haz clic en 1 Mengutibo Dorado.', desc: 'De vez en cuando, un Jose Antonio se esfuerza más de la cuenta.', check: s => s.goldenClicks >= 1 },
+        { id: 'ach_gold_7', name: 'Mengutibo de la suerte', reqText: 'Haz clic en 7 Mengutibos Dorados.', desc: 'Algún Jose Antonio habrá viajado a China y habrá visto esos gatos.', check: s => s.goldenClicks >= 7 },
+        { id: 'ach_gold_27', name: 'Vitrina de oro', reqText: 'Haz clic en 27 Mengutibos Dorados.', desc: 'Si un Jose Antonio gitano o un Gaviño Rabino los fundiese, tendríamos un problema.', check: s => s.goldenClicks >= 27 },
+
+        // Mengutibos totales
+        { id: 'ach_tot_1', name: '¡Tu primer Mengutibo!', reqText: 'Hornea 1 Mengutibo en total.', desc: 'El primero siempre sale raro.', check: s => s.totalBaked >= 1 },
+        { id: 'ach_tot_100', name: 'Venta de Mengutibos', reqText: 'Hornea 100 Mengutibos en total.', desc: 'Los vendes online y los entregas tú mismo.', check: s => s.totalBaked >= 100 },
+        { id: 'ach_tot_1k', name: 'Primer negocio', reqText: 'Hornea 1.000 Mengutibos en total.', desc: 'Tienes por fin tu primera tienda minorista.', check: s => s.totalBaked >= 1000 },
+        { id: 'ach_tot_10k', name: 'Envíos a toda España', reqText: 'Hornea 10.000 Mengutibos en total.', desc: 'Montas tu propia empresa de reparto.', check: s => s.totalBaked >= 10000 },
+        { id: 'ach_tot_100k', name: 'Sucursales en toda España', reqText: 'Hornea 100.000 Mengutibos en total.', desc: 'Hay Jose Antonios regentes.', check: s => s.totalBaked >= 100000 },
+        { id: 'ach_tot_1m', name: 'Franquicias por toda Europa', reqText: 'Hornea 1 millón de Mengutibos en total.', desc: 'Tu empresa alimenta familias.', check: s => s.totalBaked >= 1000000 },
+        { id: 'ach_tot_100m', name: 'Empresa multinacional', reqText: 'Hornea 100 millones de Mengutibos en total.', desc: '¡Todos los países quieren tus Mengutibos!', check: s => s.totalBaked >= 100000000 },
+        { id: 'ach_tot_10b', name: 'Empresa multilocal', reqText: 'Hornea 10 mil millones de Mengutibos en total.', desc: 'Personalizas los Mengutibos en cada pueblo del mundo.', check: s => s.totalBaked >= 10000000000 },
+        { id: 'ach_tot_1t', name: 'El gigante corporativo más grande de la historia', reqText: 'Hornea 1 billón de Mengutibos en total.', desc: 'Has superado a Amazon® y Coca-Cola®.', check: s => s.totalBaked >= 1000000000000 },
+
+        // Mengutibos por segundo
+        { id: 'ach_cps_1', name: 'Producción en serie', reqText: 'Alcanza 1 Mengutibo por segundo.', desc: 'Parece que aspiras alto.', check: (_, m) => m.cps >= 1 },
+        { id: 'ach_cps_100', name: 'Producción industrial', reqText: 'Alcanza 100 Mengutibos por segundo.', desc: 'Jose Antonios trabajando hasta por la noche.', check: (_, m) => m.cps >= 100 },
+        { id: 'ach_cps_1k', name: 'Producción a gran escala', reqText: 'Alcanza 1.000 Mengutibos por segundo.', desc: 'Parece que los Mengutibos llovieran.', check: (_, m) => m.cps >= 1000 },
+        { id: 'ach_cps_10k', name: 'Producción masiva', reqText: 'Alcanza 10.000 Mengutibos por segundo.', desc: 'De hecho, ya eres multimillonario, podrías parar si quisieras.', check: (_, m) => m.cps >= 10000 },
+        { id: 'ach_cps_100k', name: 'Producción excedentaria', reqText: 'Alcanza 100.000 Mengutibos por segundo.', desc: 'No hay personas en el planeta que no tengan un Mengutibo ya.', check: (_, m) => m.cps >= 100000 },
+        { id: 'ach_cps_1m', name: 'Venta de excedentes como productos alternativos', reqText: 'Alcanza 1 millón de Mengutibos por segundo.', desc: 'Ahora utilizas tus Mengutibos para muchas más cosas. ¡Son parte de la vida cotidiana!', check: (_, m) => m.cps >= 1000000 },
+
+        // Clicks (Charlipú)
+        { id: 'ach_clk_1', name: 'Tu primer Mengutibo hecho a mano', reqText: 'Haz 1 clic manual en el Mengutibo.', desc: 'Te ha costado realmente poco.', check: s => s.manualClicks >= 1 },
+        { id: 'ach_clk_100', name: 'Dolor de manos', reqText: 'Haz 100 clics manuales en el Mengutibo.', desc: 'Te duele cada músculo.', check: s => s.manualClicks >= 100 },
+        { id: 'ach_clk_1k', name: 'Ya puedes pedir ayuda a Charlipú, mira la tienda', reqText: 'Haz 1.000 clics manuales en el Mengutibo.', desc: 'Te ha costado mucho pero ya está dispuesto a darte ayuda.', check: s => s.manualClicks >= 1000 },
+        { id: 'ach_clk_10k', name: 'Récord personal', reqText: 'Haz 10.000 clics manuales en el Mengutibo.', desc: 'Te ha costado sangre, sudor y lágrimas.', check: s => s.manualClicks >= 10000 },
+        { id: 'ach_clk_100k', name: 'Falso mérito', reqText: 'Haz 100.000 clics manuales en el Mengutibo.', desc: 'Realmente no has fabricado tú todas esas galletas.', check: s => s.manualClicks >= 100000 },
+        { id: 'ach_clk_1m', name: 'Índice de hierro', reqText: 'Haz 1 millón de clics manuales en el Mengutibo.', desc: '¿Cómo es posible que no se te haya caído el dedo?', check: s => s.manualClicks >= 1000000 }
+      ];
+
+      // =========================================================================
+      // ESTADO PRINCIPAL DEL JUEGO
+      // =========================================================================
+      function createInitialState() {
+        return {
+          bakeryName: 'Fábrica de Mengutibos',
+          mengutibos: 0,
+          totalBaked: 0,
+          manualClicks: 0,
+          goldenClicks: 0,
+          buildings: {
+            boligrafos: 0,
+            jose: 0,
+            mario: 0,
+            alejandro: 0,
+            gavino: 0
+          },
+          ownedUpgrades: [],
+          unlockedAchievements: []
+        };
+      }
+
+      const SAVE_KEY = 'mengutibo_clicker_v1_1_save';
+      let state = createInitialState();
+      try {
+        const saved = JSON.parse(localStorage.getItem(SAVE_KEY) || 'null');
+        if (saved && typeof saved === 'object') {
+          state = { ...createInitialState(), ...saved, buildings: { ...createInitialState().buildings, ...(saved.buildings || {}) }, ownedUpgrades: Array.isArray(saved.ownedUpgrades) ? saved.ownedUpgrades : [], unlockedAchievements: Array.isArray(saved.unlockedAchievements) ? saved.unlockedAchievements : [] };
+        }
+      } catch (e) { console.warn('No se pudo cargar el guardado local.', e); }
+      function saveGame() { try { localStorage.setItem(SAVE_KEY, JSON.stringify(state)); } catch (e) { console.warn('No se pudo guardar la partida.', e); } }
+      let storeMode = 'buy'; // 'buy' | 'sell'
+      let bulkAmount = 1;    // 1 | 10 | 100
+      let frenzyUntil = 0;
+      let clickBoostUntil = 0;
+
+      // =========================================================================
+      // CÁLCULO DE PRODUCCIÓN, PRECIOS Y MULTIPLICADORES
+      // =========================================================================
+      function getBuildingPrice(bId, count = 1, mode = 'buy') {
+        const b = BUILDINGS.find(x => x.id === bId);
+        const owned = state.buildings[bId] || 0;
+        if (mode === 'buy') {
+          let total = 0;
+          for (let i = 0; i < count; i++) {
+            total += Math.ceil(b.baseCost * Math.pow(1.15, owned + i));
+          }
+          return total;
+        } else {
+          const sellCount = Math.min(count, owned);
+          if (sellCount <= 0) return 0;
+          let total = 0;
+          for (let i = 1; i <= sellCount; i++) {
+            total += Math.floor(b.baseCost * Math.pow(1.15, owned - i) * 0.25);
+          }
+          return total;
+        }
+      }
+
+      function calculateMetrics() {
+        const ownedUpg = new Set(state.ownedUpgrades);
+        const totalBuildings = Object.values(state.buildings).reduce((a, b) => a + b, 0);
+        const nonCursorBuildings = totalBuildings - state.buildings.boligrafos;
+
+        // Multiplicadores por edificio
+        const mult = {
+          boligrafos: 1,
+          jose: 1,
+          mario: 1,
+          alejandro: 1,
+          gavino: 1
+        };
+
+        if (ownedUpg.has('upg_boli_1')) mult.boligrafos *= 2;
+        if (ownedUpg.has('upg_boli_2')) mult.boligrafos *= 2;
+        if (ownedUpg.has('upg_boli_3')) mult.boligrafos *= 2;
+
+        if (ownedUpg.has('upg_jose_1')) mult.jose *= 2;
+        if (ownedUpg.has('upg_jose_2')) mult.jose *= 2;
+        if (ownedUpg.has('upg_jose_3')) mult.jose *= 2;
+        if (ownedUpg.has('upg_jose_4')) mult.jose *= 2;
+        if (ownedUpg.has('upg_jose_5')) mult.jose *= 2;
+
+        if (ownedUpg.has('upg_mario_1')) mult.mario *= 2;
+        if (ownedUpg.has('upg_mario_2')) mult.mario *= 2;
+        if (ownedUpg.has('upg_mario_3')) mult.mario *= 2;
+        if (ownedUpg.has('upg_mario_4')) mult.mario *= 4;
+        if (ownedUpg.has('upg_mario_5')) mult.mario *= 2;
+
+        if (ownedUpg.has('upg_ale_1')) mult.alejandro *= 2;
+        if (ownedUpg.has('upg_ale_2')) mult.alejandro *= 2;
+        if (ownedUpg.has('upg_ale_3')) mult.alejandro *= 2;
+        if (ownedUpg.has('upg_ale_4')) mult.alejandro *= 2;
+        if (ownedUpg.has('upg_ale_5')) mult.alejandro *= 2;
+
+        if (ownedUpg.has('upg_gav_1')) mult.gavino *= 2;
+        if (ownedUpg.has('upg_gav_2')) mult.gavino *= 2;
+        if (ownedUpg.has('upg_gav_3')) mult.gavino *= 2;
+        if (ownedUpg.has('upg_gav_4')) mult.gavino *= 2;
+        if (ownedUpg.has('upg_gav_5')) mult.gavino *= 3;
+
+        // Efecto "Mil dedos" (Bolígrafos negros + Bolígrafos azules)
+        let thousandFingersBonus = 0;
+        if (ownedUpg.has('upg_boli_4')) {
+          thousandFingersBonus = 0.1 * nonCursorBuildings;
+          if (ownedUpg.has('upg_boli_5')) {
+            thousandFingersBonus *= 5;
+          }
+        }
+
+        // Mojo Picón (4% por logro)
+        const mojoPct = state.unlockedAchievements.length * 4;
+        const mojoDecimal = mojoPct / 100;
+        let mojoFactor = 0;
+        if (ownedUpg.has('upg_mojo_1')) mojoFactor += 0.05;
+        if (ownedUpg.has('upg_mojo_2')) mojoFactor += 0.05;
+        if (ownedUpg.has('upg_mojo_3')) mojoFactor += 0.05;
+        if (ownedUpg.has('upg_mojo_4')) mojoFactor += 0.05;
+        if (ownedUpg.has('upg_mojo_5')) mojoFactor += 0.05;
+        const mojoMultiplier = 1 + mojoDecimal * mojoFactor;
+
+        // Multiplicador de sabores (YMCA +1% y Primer sector +2%)
+        let flavorMultiplier = 1;
+        for (const f of FLAVOR_UPGRADES) {
+          if (ownedUpg.has(f.id)) {
+            flavorMultiplier *= (1 + f.mult);
+          }
+        }
+
+        // Frenesí dorado
+        const now = Date.now();
+        const frenzyMult = now < frenzyUntil ? 7 : 1;
+        const clickFrenzyMult = now < clickBoostUntil ? 777 : 1;
+
+        const globalMult = mojoMultiplier * flavorMultiplier * frenzyMult;
+
+        // Producción por edificio
+        const eachCps = {};
+        const totalBuildingCps = {};
+        let rawCps = 0;
+
+        for (const b of BUILDINGS) {
+          let unitBase = b.baseCps * mult[b.id];
+          if (b.id === 'boligrafos') {
+            unitBase += thousandFingersBonus;
+          }
+          const unitFinal = unitBase * globalMult;
+          eachCps[b.id] = unitFinal;
+          totalBuildingCps[b.id] = unitFinal * state.buildings[b.id];
+          rawCps += totalBuildingCps[b.id];
+        }
+
+        // Valor de cada clic manual (mejoras de bolígrafos + Carlos Pulido)
+        let clickBase = 1 * mult.boligrafos + thousandFingersBonus;
+        let carlosCount = 0;
+        for (let i = 1; i <= 5; i++) {
+          if (ownedUpg.has(`upg_carlos_${i}`)) carlosCount++;
+        }
+        const cpc = (clickBase * globalMult + rawCps * (0.01 * carlosCount)) * clickFrenzyMult;
+
+        return {
+          cps: rawCps,
+          cpc,
+          eachCps,
+          totalBuildingCps,
+          mojoPct,
+          mojoMultiplier,
+          flavorMultiplier,
+          totalBuildings
+        };
+      }
+
+      // =========================================================================
+      // DESBLOQUEO DE MEJORAS Y LOGROS
+      // =========================================================================
+      function isUpgradeUnlocked(u, metrics) {
+        if (state.ownedUpgrades.includes(u.id)) return false;
+        if (u.type === 'building') {
+          return (state.buildings[u.building] || 0) >= u.reqCount;
+        }
+        if (u.type === 'carlos') {
+          return state.manualClicks >= u.reqClicks;
+        }
+        if (u.type === 'mojo') {
+          return state.unlockedAchievements.length >= u.reqAch;
+        }
+        if (u.type === 'flavor') {
+          return state.totalBaked >= u.reqBaked;
+        }
+        return false;
+      }
+
+      function checkAchievements(metrics) {
+        let newlyUnlocked = false;
+        for (const a of ACHIEVEMENTS) {
+          if (!state.unlockedAchievements.includes(a.id)) {
+            if (a.check(state, metrics)) {
+              state.unlockedAchievements.push(a.id);
+              newlyUnlocked = true;
+              showAchievementToast(a);
+            }
+          }
+        }
+        if (newlyUnlocked) {
+          playTone(587.33, 'triangle', 0.14, 0.09);
+          setTimeout(() => playTone(880, 'triangle', 0.2, 0.09), 90);
+        }
+      }
+
+      function showAchievementToast(ach) {
+        const container = document.getElementById('achievement-toast-container');
+        const toast = document.createElement('div');
+        toast.className = 'bg-[#261409]/95 border-2 border-[#f2c166] rounded-lg p-2.5 flex items-center gap-2.5 shadow-2xl pointer-events-auto transition-opacity duration-500';
+        toast.innerHTML = `
+          <div class="cc-icon-cell w-11 h-11 rounded">
+            <img src="${getSprite(ach.id)}" class="w-9 h-9 object-contain" style="image-rendering: pixelated;" />
+          </div>
+          <div class="min-w-0 flex-1">
+            <div class="text-[10px] font-serif-title font-bold uppercase tracking-wider text-[#ffd685]">¡Logro desbloqueado!</div>
+            <div class="font-serif-title font-bold text-xs text-white truncate">${ach.name}</div>
+            <div class="text-[11px] italic text-[#d6b692] line-clamp-2">${ach.desc}</div>
+          </div>
+        `;
+        container.appendChild(toast);
+        setTimeout(() => {
+          toast.style.opacity = '0';
+          setTimeout(() => toast.remove(), 500);
+        }, 4200);
+      }
+
+      // =========================================================================
+      // TOOLTIP FLOTANTE
+      // =========================================================================
+      const tooltipEl = document.getElementById('cc-tooltip');
+      const tooltipClose = document.getElementById('tt-close');
+      tooltipClose.addEventListener('click', () => { tooltipEl.classList.add('hidden'); tooltipClose.classList.add('hidden'); });
+      function updateTooltipClose() { tooltipClose.classList.toggle('hidden', !('ontouchstart' in window) && window.matchMedia('(min-width: 700px)').matches); }
+
+      function positionTooltip(e) {
+        const pad = 14;
+        const rect = tooltipEl.getBoundingClientRect();
+        let x = e.clientX - rect.width - pad;
+        let y = e.clientY - 12;
+        if (x < 10) x = e.clientX + pad;
+        if (y + rect.height > window.innerHeight - 10) {
+          y = window.innerHeight - rect.height - 10;
+        }
+        if (y < 10) y = 10;
+        tooltipEl.style.left = `${x}px`;
+        tooltipEl.style.top = `${y}px`;
+      }
+
+      function showUpgradeTooltip(u, e, alreadyOwned = false) {
+        document.getElementById('tt-icon').src = getSprite(u.id);
+        document.getElementById('tt-name').textContent = u.name;
+
+        const badgeEl = document.getElementById('tt-badge');
+        if (u.type === 'flavor') {
+          badgeEl.classList.remove('hidden');
+          badgeEl.textContent = u.category;
+          if (u.category === 'YMCA') {
+            badgeEl.className = 'mt-1 inline-block px-2 py-0.5 rounded text-[10px] font-extrabold tracking-wide bg-emerald-900/90 border border-emerald-400/70 text-emerald-200';
+          } else {
+            badgeEl.className = 'mt-1 inline-block px-2 py-0.5 rounded text-[10px] font-extrabold tracking-wide bg-sky-900/90 border border-sky-400/70 text-sky-200';
+          }
+        } else {
+          badgeEl.className = 'hidden';
+        }
+
+        const priceEl = document.getElementById('tt-price');
+        if (alreadyOwned) {
+          priceEl.textContent = 'Comprada';
+          priceEl.className = 'font-extrabold text-right shrink-0 text-xs text-[#ffd685]';
+        } else {
+          const canBuy = state.mengutibos >= u.price;
+          priceEl.textContent = `${formatNum(u.price)} Mengutibos`;
+          priceEl.className = `font-extrabold text-right shrink-0 text-xs ${canBuy ? 'text-[#7ef29d]' : 'text-[#ff7b6b]'}`;
+        }
+
+        document.getElementById('tt-effect').textContent = (u.type === 'building' && u.building ? `Mejora: ${BUILDINGS.find(b => b.id === u.building)?.name || u.building}. ` : '') + u.effectText;
+        const descEl = document.getElementById('tt-desc');
+        if (u.desc) {
+          descEl.textContent = `"${u.desc}"`;
+          descEl.classList.remove('hidden');
+        } else {
+          descEl.classList.add('hidden');
+        }
+
+        tooltipEl.classList.remove('hidden');
+        updateTooltipClose();
+        positionTooltip(e);
+      }
+
+      function showBuildingTooltip(b, isMystery, e) {
+        const metrics = calculateMetrics();
+        const owned = state.buildings[b.id] || 0;
+        const price = getBuildingPrice(b.id, bulkAmount, storeMode);
+
+        const iconEl = document.getElementById('tt-icon');
+        iconEl.src = getSprite(b.id);
+        iconEl.style.filter = isMystery ? 'brightness(0)' : 'none';
+
+        document.getElementById('tt-name').textContent = isMystery ? '???' : b.name;
+        const badgeEl = document.getElementById('tt-badge');
+        badgeEl.className = 'mt-1 inline-block px-2 py-0.5 rounded text-[10px] font-bold bg-[#382112] border border-[#8c5d38] text-[#e6bd8a]';
+        badgeEl.textContent = `Poseídos: ${owned}`;
+
+        const priceEl = document.getElementById('tt-price');
+        if (storeMode === 'buy') {
+          const canBuy = !isMystery && state.mengutibos >= price;
+          priceEl.textContent = `${formatNum(price)} Mengutibos`;
+          priceEl.className = `font-extrabold text-right shrink-0 text-xs ${canBuy ? 'text-[#7ef29d]' : 'text-[#ff7b6b]'}`;
+        } else {
+          priceEl.textContent = `+${formatNum(price)} Mengutibos`;
+          priceEl.className = 'font-extrabold text-right shrink-0 text-xs text-[#ffd685]';
+        }
+
+        const effectEl = document.getElementById('tt-effect');
+        const descEl = document.getElementById('tt-desc');
+
+        if (isMystery) {
+          effectEl.textContent = 'Edificio aún por descubrir.';
+          descEl.textContent = '"Sigue fabricando Mengutibos para desbloquear este edificio."';
+          descEl.classList.remove('hidden');
+        } else {
+          const each = metrics.eachCps[b.id] || 0;
+          const total = metrics.totalBuildingCps[b.id] || 0;
+          const share = metrics.cps > 0 ? ((total / metrics.cps) * 100).toFixed(1).replace('.', ',') : '0';
+          effectEl.textContent = `Cada ${b.name} produce ${formatNum(each)} Mengutibos/s. En total producen ${formatNum(total)} Mengutibos/s (${share}% del total).`;
+          descEl.textContent = `"${b.desc}"`;
+          descEl.classList.remove('hidden');
+        }
+
+        tooltipEl.classList.remove('hidden');
+        updateTooltipClose();
+        positionTooltip(e);
+      }
+
+      function showAchievementTooltip(a, unlocked, e) {
+        const iconEl = document.getElementById('tt-icon');
+        iconEl.src = getSprite(a.id);
+        iconEl.style.filter = unlocked ? 'none' : 'brightness(0)';
+
+        document.getElementById('tt-name').textContent = unlocked ? a.name : 'Logro bloqueado';
+        const badgeEl = document.getElementById('tt-badge');
+        badgeEl.className = `mt-1 inline-block px-2 py-0.5 rounded text-[10px] font-bold ${
+          unlocked
+            ? 'bg-amber-900/80 border border-amber-400/70 text-amber-200'
+            : 'bg-stone-900 border border-stone-600 text-stone-400'
+        }`;
+        badgeEl.textContent = unlocked ? 'Desbloqueado (+4% Mojo Picón)' : 'Bloqueado';
+
+        document.getElementById('tt-price').textContent = '';
+        const effectEl = document.getElementById('tt-effect');
+        const descEl = document.getElementById('tt-desc');
+
+        if (unlocked) {
+          effectEl.textContent = a.reqText;
+          descEl.textContent = `"${a.desc}"`;
+          descEl.classList.remove('hidden');
+        } else {
+          effectEl.textContent = 'Sigue jugando para descubrir cómo desbloquear este logro.';
+          descEl.classList.add('hidden');
+        }
+
+        tooltipEl.classList.remove('hidden');
+        updateTooltipClose();
+        positionTooltip(e);
+      }
+
+      function moveTooltip(e) {
+        if (!tooltipEl.classList.contains('hidden')) {
+          positionTooltip(e);
+        }
+      }
+
+      function hideTooltip() {
+        tooltipEl.classList.add('hidden');
+        document.getElementById('tt-icon').style.filter = 'none';
+      }
+
+      // =========================================================================
+      // RENDERIZADO DE LA TIENDA Y ESCENARIOS
+      // =========================================================================
+      let lastStoreSignature = '';
+
+      function renderStore(force = false) {
+        const metrics = calculateMetrics();
+        const unlockedUpgrades = ALL_UPGRADES
+          .filter(u => isUpgradeUnlocked(u, metrics))
+          .sort((a, b) => a.price - b.price);
+
+        const sig = [
+          storeMode,
+          bulkAmount,
+          state.ownedUpgrades.length,
+          unlockedUpgrades.map(u => `${u.id}:${state.mengutibos >= u.price ? 1 : 0}`).join(','),
+          BUILDINGS.map((b, idx) => {
+            const p = getBuildingPrice(b.id, bulkAmount, storeMode);
+            const prevOwned = idx === 0 ? 1 : state.buildings[BUILDINGS[idx - 1].id];
+            const discovered = state.buildings[b.id] > 0 || prevOwned > 0 || state.totalBaked >= b.baseCost * 0.45;
+            return `${b.id}:${state.buildings[b.id]}:${state.mengutibos >= p ? 1 : 0}:${discovered ? 1 : 0}`;
+          }).join('|')
+        ].join('#');
+
+        if (!force && sig === lastStoreSignature) return;
+        lastStoreSignature = sig;
+
+        // 1. Mejoras de la tienda
+        document.getElementById('available-upgrades-count').textContent = `${unlockedUpgrades.length} disponibles`;
+        const upgGrid = document.getElementById('upgrades-store-grid');
+        upgGrid.innerHTML = '';
+
+        if (unlockedUpgrades.length === 0) {
+          upgGrid.innerHTML = '<div class="text-xs italic text-[#9e7c56] py-3 px-1">No hay mejoras disponibles por ahora...</div>';
+        } else {
+          for (const u of unlockedUpgrades) {
+            const canBuy = state.mengutibos >= u.price;
+            const tile = document.createElement('div');
+            tile.className = `cc-upgrade-tile rounded ${canBuy ? 'affordable' : 'unaffordable'}`;
+
+            const img = document.createElement('img');
+            img.src = getSprite(u.id);
+            img.alt = u.name;
+            img.style.imageRendering = 'pixelated';
+            img.className = 'w-11 h-11 object-contain pointer-events-none';
+            tile.appendChild(img);
+
+            if (u.type === 'flavor') {
+              const dot = document.createElement('span');
+              dot.className = `absolute bottom-1 right-1 w-2.5 h-2.5 rounded-full border border-black ${
+                u.category === 'YMCA' ? 'bg-emerald-400' : 'bg-sky-400'
+              }`;
+              tile.appendChild(dot);
+            }
+
+            tile.addEventListener('mouseenter', (e) => showUpgradeTooltip(u, e, false));
+            tile.addEventListener('mousemove', moveTooltip);
+            tile.addEventListener('mouseleave', hideTooltip);
+            tile.addEventListener('click', () => {
+              if (state.mengutibos >= u.price && !state.ownedUpgrades.includes(u.id)) {
+                state.mengutibos -= u.price;
+                state.ownedUpgrades.push(u.id);
+                playTone(660, 'sine', 0.11, 0.1);
+                hideTooltip();
+                updateAllUI(true);
+              }
+            });
+
+            upgGrid.appendChild(tile);
+          }
+        }
+
+        // 2. Edificios de la tienda
+        const bList = document.getElementById('buildings-store-list');
+        bList.innerHTML = '';
+
+        BUILDINGS.forEach((b, idx) => {
+          const owned = state.buildings[b.id] || 0;
+          const prevOwned = idx === 0 ? 1 : (state.buildings[BUILDINGS[idx - 1].id] || 0);
+          const isDiscovered = owned > 0 || prevOwned > 0 || state.totalBaked >= b.baseCost * 0.45;
+          const isMystery = !isDiscovered;
+          const price = getBuildingPrice(b.id, bulkAmount, storeMode);
+          const canAct = !isMystery && (storeMode === 'buy'
+            ? state.mengutibos >= price
+            : owned > 0);
+
+          const row = document.createElement('div');
+          row.className = `cc-product-row px-3 py-2.5 flex items-center justify-between gap-2.5 ${
+            isMystery ? 'mystery' : (canAct ? 'affordable' : 'unaffordable')
+          }`;
+
+          const iconWrap = document.createElement('div');
+          iconWrap.className = 'cc-icon-cell w-13 h-13 p-1 rounded';
+
+          const icon = document.createElement('img');
+          icon.src = getSprite(b.id);
+          icon.alt = b.name;
+          icon.style.imageRendering = 'pixelated';
+          icon.className = `w-11 h-11 object-contain shrink-0 ${isMystery ? 'brightness-0' : ''}`;
+          iconWrap.appendChild(icon);
+
+          const mid = document.createElement('div');
+          mid.className = 'flex-1 min-w-0';
+          const title = document.createElement('div');
+          title.className = 'font-serif-title font-bold text-sm sm:text-base text-white truncate';
+          title.textContent = isMystery ? '???' : b.name;
+
+          const costEl = document.createElement('div');
+          costEl.className = `text-xs font-extrabold ${
+            isMystery ? 'text-[#9e7e5a]' : (canAct ? 'text-[#7ef29d]' : 'text-[#ff8575]')
+          }`;
+          costEl.textContent = storeMode === 'buy'
+            ? `${formatNum(price)} Mengutibos`
+            : `Vender por +${formatNum(price)}`;
+
+          mid.appendChild(title);
+          mid.appendChild(costEl);
+
+          const countEl = document.createElement('div');
+          countEl.className = 'font-cookie text-2xl sm:text-3xl text-[#f5dec0]/85 shrink-0';
+          countEl.textContent = owned > 0 ? owned : '';
+
+          row.appendChild(iconWrap);
+          row.appendChild(mid);
+          row.appendChild(countEl);
+
+          row.addEventListener('mouseenter', (e) => showBuildingTooltip(b, isMystery, e));
+          row.addEventListener('mousemove', moveTooltip);
+          row.addEventListener('mouseleave', hideTooltip);
+          row.addEventListener('click', () => {
+            if (isMystery) return;
+            if (storeMode === 'buy') {
+              const cost = getBuildingPrice(b.id, bulkAmount, 'buy');
+              if (state.mengutibos >= cost) {
+                state.mengutibos -= cost;
+                state.buildings[b.id] += bulkAmount;
+                playTone(440 + idx * 55, 'triangle', 0.09, 0.09);
+                updateAllUI(true);
+              }
+            } else {
+              const sellQty = Math.min(bulkAmount, state.buildings[b.id]);
+              if (sellQty > 0) {
+                const gain = getBuildingPrice(b.id, sellQty, 'sell');
+                state.buildings[b.id] -= sellQty;
+                state.mengutibos += gain;
+                playTone(320, 'sine', 0.09, 0.08);
+                updateAllUI(true);
+              }
+            }
+          });
+
+          bList.appendChild(row);
+        });
+      }
+
+      let lastStagesSignature = '';
+      function renderVisualStages() {
+        const sig = BUILDINGS.map(b => `${b.id}:${state.buildings[b.id]}`).join(',');
+        if (sig === lastStagesSignature) return;
+        lastStagesSignature = sig;
+
+        const container = document.getElementById('visual-stages-container');
+        const emptyMsg = document.getElementById('empty-stages-msg');
+        container.innerHTML = '';
+
+        let hasAny = false;
+        for (const b of BUILDINGS) {
+          if (b.id === 'boligrafos') continue; // Los bolígrafos orbitan alrededor del Mengutibo
+          const owned = state.buildings[b.id] || 0;
+          if (owned <= 0) continue;
+          hasAny = true;
+
+          const strip = document.createElement('div');
+          strip.className = 'stage-strip px-3 py-2.5 flex flex-col gap-1.5';
+
+          const header = document.createElement('div');
+          header.className = 'flex items-center justify-between text-xs';
+          header.innerHTML = `
+            <span class="font-serif-title font-bold text-[#f2cfa5]">${b.name}</span>
+            <span class="text-[#b8926a] font-bold">x${owned}</span>
+          `;
+          strip.appendChild(header);
+
+          const iconsWrap = document.createElement('div');
+          iconsWrap.className = 'flex flex-wrap gap-1.5 items-center';
+          const showCount = Math.min(owned, 10);
+          for (let i = 0; i < showCount; i++) {
+            const cell = document.createElement('div');
+            cell.className = 'cc-icon-cell w-10 h-10 rounded';
+            const img = document.createElement('img');
+            img.src = getSprite(b.id);
+            img.alt = b.name;
+            img.style.imageRendering = 'pixelated';
+            img.className = 'w-8 h-8 object-contain';
+            cell.appendChild(img);
+            iconsWrap.appendChild(cell);
+          }
+          strip.appendChild(iconsWrap);
+          container.appendChild(strip);
+        }
+
+        emptyMsg.classList.toggle('hidden', hasAny);
+      }
+
+      function renderStatsAndAchievements() {
+        const metrics = calculateMetrics();
+        document.getElementById('stat-bank').textContent = formatNum(Math.floor(state.mengutibos));
+        document.getElementById('stat-baked').textContent = formatNum(Math.floor(state.totalBaked));
+        document.getElementById('stat-cps').textContent = formatNum(metrics.cps);
+        document.getElementById('stat-cpc').textContent = formatNum(metrics.cpc);
+        document.getElementById('stat-clicks').textContent = formatNum(state.manualClicks);
+        document.getElementById('stat-buildings').textContent = formatNum(metrics.totalBuildings);
+        document.getElementById('stat-golden').textContent = formatNum(state.goldenClicks);
+        document.getElementById('stat-mojo').textContent = `${metrics.mojoPct}% (x${metrics.mojoMultiplier.toFixed(2)})`;
+
+        document.getElementById('stat-upg-count').textContent = `${state.ownedUpgrades.length}/${ALL_UPGRADES.length}`;
+        const ownedGrid = document.getElementById('owned-upgrades-grid');
+        ownedGrid.innerHTML = '';
+        for (const u of ALL_UPGRADES) {
+          const owned = state.ownedUpgrades.includes(u.id);
+          const tile = document.createElement('div');
+          tile.className = `cc-icon-cell w-11 h-11 rounded ${owned ? 'cursor-pointer' : 'opacity-35'}`;
+          tile.title = u.name;
+          if (owned) {
+            const img = document.createElement('img'); img.src = getSprite(u.id); img.style.imageRendering = 'pixelated'; img.className = 'w-9 h-9 object-contain'; tile.appendChild(img);
+            tile.addEventListener('mouseenter', (e) => showUpgradeTooltip(u, e, true)); tile.addEventListener('mousemove', moveTooltip); tile.addEventListener('mouseleave', hideTooltip);
+          } else { tile.innerHTML = '<span class="text-[#9e7c56] font-bold text-sm">?</span>'; }
+          ownedGrid.appendChild(tile);
+        }
+
+        document.getElementById('stat-ach-count').textContent = `${state.unlockedAchievements.length}/${ACHIEVEMENTS.length}`;
+        const achGrid = document.getElementById('achievements-grid');
+        achGrid.innerHTML = '';
+        for (const a of ACHIEVEMENTS) {
+          const unlocked = state.unlockedAchievements.includes(a.id);
+          const tile = document.createElement('div');
+          tile.className = `cc-icon-cell w-11 h-11 rounded ${
+            unlocked
+              ? 'border-[#b8a27a] bg-[#5b4935] cursor-pointer'
+              : 'opacity-50'
+          }`;
+          if (unlocked) {
+            const img = document.createElement('img');
+            const aid = a.id.toLowerCase();
+            const spriteId = aid.includes('boli') ? 'boligrafos' : aid.includes('jose') ? 'jose' : aid.includes('mario') ? 'mario' : aid.includes('alejandro') ? 'alejandro' : (aid.includes('gav') || aid.includes('gavi')) ? 'gavino' : a.id;
+            img.src = getSprite(spriteId);
+            img.style.imageRendering = 'pixelated';
+            img.className = 'w-9 h-9 object-contain';
+            tile.appendChild(img);
+          } else {
+            tile.innerHTML = '<span class="text-[#9e7c56] font-bold text-sm">?</span>';
+          }
+          tile.addEventListener('mouseenter', (e) => showAchievementTooltip(a, unlocked, e));
+          tile.addEventListener('mousemove', moveTooltip);
+          tile.addEventListener('mouseleave', hideTooltip);
+          achGrid.appendChild(tile);
+        }
+        // Gráfica circular de la aportación actual de cada edificio al CpS.
+        const chart = document.getElementById('production-chart');
+        const legend = document.getElementById('production-legend');
+        if (chart && legend) {
+          const ctx = chart.getContext('2d'); const values = BUILDINGS.map(b => ({ name: b.name, value: (state.buildings[b.id] || 0) * b.baseCps }));
+          const total = values.reduce((sum, v) => sum + v.value, 0); ctx.clearRect(0, 0, chart.width, chart.height); legend.innerHTML = '';
+          const colors = ['#d97706','#60a5fa','#a78bfa','#34d399','#f87171']; let angle = -Math.PI / 2;
+          if (total <= 0) { ctx.beginPath(); ctx.arc(110,110,88,0,Math.PI*2); ctx.fillStyle='#60452e'; ctx.fill(); }
+          values.forEach((v,i) => { const share = total ? v.value/total : 0; if (share > 0) { ctx.beginPath(); ctx.moveTo(110,110); ctx.arc(110,110,88,angle,angle+share*Math.PI*2); ctx.closePath(); ctx.fillStyle=colors[i%colors.length]; ctx.fill(); angle += share*Math.PI*2; }
+            const row=document.createElement('div'); row.className='flex items-center gap-2'; const sw=document.createElement('span'); sw.style.cssText=`display:inline-block;width:10px;height:10px;background:${colors[i%colors.length]};`; row.appendChild(sw); const label=document.createElement('span'); label.textContent=`${v.name}: ${(share*100).toFixed(1).replace('.',',')}%`; row.appendChild(label); legend.appendChild(row); });
+        }
+      }
+
+      function updateAllUI(forceStore = false) {
+        const metrics = calculateMetrics();
+        checkAchievements(metrics);
+
+        const countWhole = Math.floor(state.mengutibos);
+        document.getElementById('mengutibo-count').textContent =
+          `${formatNum(countWhole)} ${countWhole === 1 ? 'Mengutibo' : 'Mengutibos'}`;
+        document.getElementById('mengutibo-cps').textContent =
+          `por segundo: ${formatNum(metrics.cps)}`;
+
+        document.getElementById('mojo-pct-label').textContent = `${metrics.mojoPct}%`;
+        document.getElementById('mojo-mult-label').textContent = `x${metrics.mojoMultiplier.toFixed(2)}`;
+        document.getElementById('bakery-name-btn').textContent = state.bakeryName;
+
+        const buffBadge = document.getElementById('active-buff-badge');
+        const now = Date.now();
+        if (now < frenzyUntil) {
+          const sec = Math.ceil((frenzyUntil - now) / 1000);
+          buffBadge.textContent = `✨ Frenesí Dorado x7 (${sec}s)`;
+          buffBadge.classList.remove('hidden');
+        } else if (now < clickBoostUntil) {
+          const sec = Math.ceil((clickBoostUntil - now) / 1000);
+          buffBadge.textContent = `⚡ Frenesí de Clics x777 (${sec}s)`;
+          buffBadge.classList.remove('hidden');
+        } else {
+          buffBadge.classList.add('hidden');
+        }
+
+        renderStore(forceStore);
+        renderVisualStages();
+
+        if (!document.getElementById('tab-stats').classList.contains('hidden')) {
+          renderStatsAndAchievements();
+        }
+      }
+
+      // =========================================================================
+      // ANIMACIÓN DEL MENGUTIBO GIRATORIO, BOLÍGRAFOS ORBITANDO Y OLA DE MOJO PICÓN
+      // =========================================================================
+      let mengutiboAngle = 0;
+      let mengutiboSpinVel = 0.25;
+      let mengutiboScalePunch = 0;
+      let rayAngle = 0;
+      let wavePhase = 0;
+      const fallingMengutibos = [];
+
+      const bigCanvas = document.getElementById('big-mengutibo-canvas');
+      const bigCtx = bigCanvas.getContext('2d');
+      const bgCanvas = document.getElementById('left-bg-canvas');
+      const bgCtx = bgCanvas.getContext('2d');
+
+      function resizeLeftCanvases() {
+        const bigRect = bigCanvas.getBoundingClientRect();
+        if (bigRect.width > 0 && bigRect.height > 0) {
+          bigCanvas.width = Math.floor(bigRect.width * window.devicePixelRatio);
+          bigCanvas.height = Math.floor(bigRect.height * window.devicePixelRatio);
+        }
+        const bgRect = bgCanvas.getBoundingClientRect();
+        if (bgRect.width > 0 && bgRect.height > 0) {
+          bgCanvas.width = Math.floor(bgRect.width);
+          bgCanvas.height = Math.floor(bgRect.height);
+        }
+      }
+      window.addEventListener('resize', resizeLeftCanvases);
+      resizeLeftCanvases();
+
+      function spawnFallingMengutibo(xRatio = Math.random()) {
+        if (fallingMengutibos.length > 42) return;
+        fallingMengutibos.push({
+          x: xRatio * (bgCanvas.width || 320),
+          y: -28,
+          vy: 75 + Math.random() * 95,
+          rot: Math.random() * Math.PI * 2,
+          vrot: (Math.random() - 0.5) * 3,
+          size: 20 + Math.random() * 12
+        });
+      }
+
+      function spawnFloatingText(x, y, text) {
+        const el = document.createElement('div');
+        el.className = 'float-num font-cookie text-base sm:text-lg text-white';
+        el.style.left = `${x}px`;
+        el.style.top = `${y}px`;
+        el.textContent = text;
+        document.body.appendChild(el);
+        setTimeout(() => el.remove(), 900);
+      }
+
+      document.getElementById('big-mengutibo-wrapper').addEventListener('click', (e) => {
+        const metrics = calculateMetrics();
+        const gained = metrics.cpc;
+        state.mengutibos += gained;
+        state.totalBaked += gained;
+        state.manualClicks += 1;
+
+        // Aceleración fuerte cuanto más rápido se cliquea
+        mengutiboSpinVel = Math.min(28, mengutiboSpinVel + 2.6);
+        mengutiboScalePunch = 0.14;
+
+        spawnFallingMengutibo();
+        spawnFloatingText(e.clientX, e.clientY - 12, `+${formatNum(gained)}`);
+        playTone(520 + Math.random() * 90, 'sine', 0.06, 0.07);
+        updateAllUI(false);
+      });
+
+      document.addEventListener('keydown', (e) => {
+        if (e.code !== 'Space' || e.repeat || e.target.closest('input, textarea, select, button, [contenteditable="true"]')) return;
+        e.preventDefault();
+        document.getElementById('big-mengutibo-wrapper').click();
+      });
+
+      // =========================================================================
+      // MENGUTIBO DORADO CON APARICIÓN Y DESVANECIMIENTO SUAVE
+      // =========================================================================
+      let activeGoldenEl = null;
+
+      function spawnGoldenMengutibo() {
+        if (activeGoldenEl) return;
+
+        const el = document.createElement('img');
+        el.src = getSprite('mengutibo_gold');
+        el.alt = 'Mengutibo Dorado';
+        el.style.imageRendering = 'pixelated';
+        el.className = 'golden-mengutibo w-16 h-16 sm:w-20 sm:h-20';
+
+        const margin = 70;
+        const gx = margin + Math.random() * Math.max(80, window.innerWidth - margin * 2);
+        const gy = margin + Math.random() * Math.max(80, window.innerHeight - margin * 2);
+        el.style.left = `${gx}px`;
+        el.style.top = `${gy}px`;
+
+        document.body.appendChild(el);
+        activeGoldenEl = el;
+
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            el.classList.add('visible');
+          });
+        });
+
+        const removeGolden = () => {
+          if (!activeGoldenEl) return;
+          const target = activeGoldenEl;
+          activeGoldenEl = null;
+          target.classList.remove('visible');
+          setTimeout(() => target.remove(), 1650);
+        };
+
+        const autoDespawn = setTimeout(removeGolden, 13000);
+
+        el.addEventListener('click', (e) => {
+          clearTimeout(autoDespawn);
+          state.goldenClicks += 1;
+          playTone(880, 'sine', 0.12, 0.11);
+          setTimeout(() => playTone(1174.66, 'sine', 0.18, 0.11), 80);
+
+          const metrics = calculateMetrics();
+          const roll = Math.random();
+          if (roll < 0.45) {
+            const bonus = Math.max(13, Math.floor(metrics.cps * 60 + state.mengutibos * 0.15));
+            state.mengutibos += bonus;
+            state.totalBaked += bonus;
+            spawnFloatingText(e.clientX, e.clientY - 10, `¡Suerte! +${formatNum(bonus)}`);
+          } else if (roll < 0.85) {
+            frenzyUntil = Date.now() + 30000;
+            spawnFloatingText(e.clientX, e.clientY - 10, '¡Frenesí Dorado x7 (30s)!');
+          } else {
+            clickBoostUntil = Date.now() + 13000;
+            spawnFloatingText(e.clientX, e.clientY - 10, '¡Frenesí de Clics x777 (13s)!');
+          }
+
+          removeGolden();
+          updateAllUI(true);
+        });
+      }
+
+      setInterval(() => {
+        if (!activeGoldenEl && Math.random() < 0.35) {
+          spawnGoldenMengutibo();
+        }
+      }, 28000);
+
+      // =========================================================================
+      // PERIÓDICO: ~100 NOTICIAS DINÁMICAS SEGÚN PROGRESO Y DESBLOQUEOS
+      // =========================================================================
+      function getContextNews() {
+        const metrics = calculateMetrics();
+        const pool = [];
+
+        // 1. Noticias según etapa de producción (CpS)
+        if (metrics.cps < 50) {
+          pool.push(
+            '"Tienes ganas de criar Mengutibos, aunque nadie en el barrio los conozca todavía."',
+            '"Tus primeros Mengutibos salen algo raros, pero tienen una personalidad única."',
+            '"Un vecino adopta un Mengutibo por curiosidad y vuelve al día siguiente pidiendo un compañero para él."',
+            '"Tu casa empieza a llenarse de pequeños Mengutibos curioseando por cada rincón."',
+            '"Anotas los cuidados básicos del Mengutibo en una libreta para que estén siempre contentos."',
+            '"Tus amigos del instituto dicen que tus Mengutibos son las criaturas más simpáticas que han visto."',
+            '"Haces tu primera entrega en mano de un Mengutibo en la esquina de la calle."',
+            '"Nadie entiende todavía qué especie es exactamente un Mengutibo, pero todos quieren cuidar uno."',
+            '"Tu madre pregunta por qué hay tantos Mengutibos jugando juntos encima de la mesa del salón."',
+            '"El quiosquero del barrio te pide adoptar un par de Mengutibos para que le hagan compañía tras el mostrador."',
+            '"Primeras reseñas en el grupo de WhatsApp: «Son rarísimos, quiero diez más para mi casa»."',
+            '"Preparas camitas cómodas y juguetes para que tus Mengutibos crezcan felices."'
+          );
+        } else if (metrics.cps < 5000) {
+          pool.push(
+            '"Tus Mengutibos empiezan a hacerse famosos en todos los recreos del distrito."',
+            '"Los vecinos hacen cola desde primera hora para llevarse un Mengutibo a casa."',
+            '"El periódico local dedica un reportaje al misterioso auge de la adopción de Mengutibos."',
+            '"Varios comercios de la zona tienen ya su propio Mengutibo mascota saludando a los clientes."',
+            '"Tu pequeña tienda de Mengutibos se queda sin ejemplares disponibles antes de mediodía."',
+            '"Se agotan las casetas, correas y accesorios para Mengutibos en todas las tiendas del barrio."',
+            '"Un experto en fauna urbana califica al Mengutibo como «una criatura inexplicable pero adorable»."',
+            '"Empiezan a verse camisetas con la cara de Mengutibo en todos los mercadillos."',
+            '"Los transportistas apenas dan abasto llevando Mengutibos a sus nuevos hogares."',
+            '"Un colegio entero organiza una excursión para conocer tu criadero de Mengutibos."',
+            '"La asociación de vecinos premia tu centro de Mengutibos como la iniciativa más querida del año."',
+            '"Crece el debate en redes: ¿duerme mejor el Mengutibo en cesta de mimbre o en cojín?"'
+          );
+        } else if (metrics.cps < 500000) {
+          pool.push(
+            '"Tus transportes especiales de Mengutibos cruzan ya todas las carreteras de España."',
+            '"Se inauguran nuevas tiendas oficiales de Mengutibos en las principales capitales de provincia."',
+            '"Los telediarios abren con el fenómeno social de la fiebre por tener un Mengutibo en casa."',
+            '"Una universidad abre una cátedra dedicada exclusivamente a estudiar el comportamiento del Mengutibo."',
+            '"Las aerolíneas nacionales permiten viajar con Mengutibos en cabina en todos sus vuelos."',
+            '"El número de Mengutibos por hogar bate todos los récords históricos del país."',
+            '"Criadores competidores intentan imitar al Mengutibo sin éxito alguno."',
+            '"Se celebra en Sevilla la primera Exhibición Internacional del Mengutibo con lleno absoluto."',
+            '"Los sociólogos afirman que tener un Mengutibo en casa mejora el humor de toda la familia."',
+            '"Tus centros trabajan en tres turnos ininterrumpidos para atender las solicitudes de toda la península."',
+            '"Un museo de arte contemporáneo expone una estatua gigante de Mengutibo en su sala principal."',
+            '"La palabra «Mengutibo» entra oficialmente en el diccionario como sinónimo de compañero inseparable."'
+          );
+        } else {
+          pool.push(
+            '"¡Más de medio millón de Mengutibos por segundo! El planeta entero gira alrededor de tus criaturas."',
+            '"Las bolsas mundiales cotizan al ritmo que marca tu red global de Mengutibos."',
+            '"La ONU declara al Mengutibo patrimonio vivo esencial de la humanidad."',
+            '"Se habilitan rutas aéreas dedicadas exclusivamente al traslado rápido de Mengutibos."',
+            '"Astronautas de la Estación Espacial Internacional reciben su propio Mengutibo de compañía en órbita."',
+            '"Grandes corporaciones internacionales reconvierten sus sedes en centros de cuidado de Mengutibos."',
+            '"Científicos confirman que ya hay más Mengutibos que teléfonos móviles en la superficie terrestre."',
+            '"Todos los países del mundo celebran el Día Internacional del Mengutibo como festivo oficial."',
+            '"Se detectan señales de radio desde otra galaxia pidiendo adoptar una pareja de Mengutibos."',
+            '"Los libros de historia dividen la humanidad en «Antes de Mengutibo» y «Después de Mengutibo»."',
+            '"Un satélite artificial orbita la Tierra proyectando la sonrisa de Mengutibo en el cielo nocturno."',
+            '"Tu imperio supera en prestigio y alcance a todas las empresas históricas juntas."'
+          );
+        }
+
+        // 2. Noticias condicionales según edificios y elementos desbloqueados
+        if (state.buildings.boligrafos > 0) {
+          pool.push(
+            '"Los profesores sospechan de la desaparición misteriosa de bolígrafos rojos en clase."',
+            '"Un estuche aparece completamente vacío tras pasar cinco minutos sin vigilancia."',
+            '"El mercado negro de bolígrafos rojos robados en la ESO alcanza máximos históricos."',
+            '"Varias papelerías limitan la venta de bolígrafos rojos a dos unidades por alumno."',
+            '"Un alumno jura que su bolígrafo rojo se cayó al suelo y desapareció en otra dimensión."',
+            '"Los exámenes se corrigen con rotulador verde ante la escasez absoluta de tinta roja."',
+            '"Se descubre un almacén secreto repleto de miles de bolígrafos rojos de 2º y 3º de la ESO."'
+          );
+        }
+
+        if (state.buildings.jose > 0) {
+          pool.push(
+            '"Un José Antonio asegura cuidar el doble de Mengutibos tras tomarse un buen batido."',
+            '"Decenas de José Antonios hacen cola frente a la máquina expendedora de zumos."',
+            '"Un José Antonio pregunta si hoy toca maratón de episodios de Bob Esponja en el descanso."',
+            '"Se detecta un grupo de José Antonios debatiendo muy seriamente sobre merienda completa."',
+            '"El departamento de recursos humanos clona otro turno completo de José Antonios."',
+            '"Un José Antonio confunde la zona de juegos de los Mengutibos con un tobogán, pero la producción sube."',
+            '"Informe interno: «La lealtad de los José Antonios aumenta un 200% con galletas Mini Chips Ahoy!»."'
+          );
+          if (state.goldenClicks > 0) {
+            pool.push(
+              '"Un José Antonio afirma haber visto un Mengutibo Dorado brillando al fondo del recinto."',
+              '"Los José Antonios pulen con mimo el pedestal donde descansa tu trofeo de Mengutibos Dorados."'
+            );
+          }
+        }
+
+        if (state.buildings.mario > 0) {
+          pool.push(
+            '"Mario presenta una nueva generación de mascotas para acompañar a los Mengutibos."',
+            '"Un bicho bola escapado del laboratorio de Mario rueda alegremente junto a los Mengutibos."',
+            '"Mario inaugura un santuario en honor a Federico y Federica."',
+            '"La nueva Pokédex de criaturas de Mario se convierte en el libro más vendido del trimestre."',
+            '"Los trabajadores aseguran escuchar zumbidos motivadores procedentes del ala de Mario."',
+            '"Mario afirma que la nostalgia es el mejor vínculo entre mascotas y Mengutibos."',
+            '"Se avistan criaturas misteriosas ayudando a entrenar Mengutibos durante el turno de noche."'
+          );
+        }
+
+        if (state.buildings.alejandro > 0) {
+          pool.push(
+            '"Alejandro alimenta a los Mengutibos con un puchero de denominación de origen que los llena de energía."',
+            '"El aroma a garbanzos lechosos y jamón ibérico se percibe a tres kilómetros de la fábrica."',
+            '"Críticos con estrella Michelin hacen reservas con seis meses de antelación para probar el puchero de Alejandro."',
+            '"Alejandro supervisa personalmente la cocción lenta de cien ollas industriales a la vez."',
+            '"Un jarrete de Wagyu japonés desaparece misteriosamente rumbo a la cocina de Alejandro."',
+            '"Los Mengutibos crecen el triple de fuertes desde que Alejandro les prepara puchero caliente."',
+            '"Se exportan tarros de puchero gourmet de Alejandro como el alimento favorito de cada Mengutibo."'
+          );
+        }
+
+        if (state.buildings.gavino > 0) {
+          pool.push(
+            '"Pablo Gaviño revisa los beneficios trimestrales con calculadora en mano."',
+            '"Gaviño negocia una reducción de impuestos que deja boquiabiertos a los auditores."',
+            '"Se escuchan cánticos desafinados desde el despacho de Pablo Gaviño."',
+            '"Pablo Gaviño exige revisar cada céntimo de margen antes de aprobar una nueva inversión."',
+            '"La bóveda de seguridad de la fábrica incorpora triple cerradura por sugerencia de Gaviño."',
+            '"Gaviño propone abrir una filial financiera para reinvertir los excedentes de Mengutibos."',
+            '"Informe contable de Pablo Gaviño: «Todo en orden, pero podríamos ganar todavía más»."'
+          );
+        }
+
+        if (state.manualClicks >= 1000) {
+          pool.push(
+            '"Charlipú aparece por la fábrica preguntando si alguien necesita ayuda para tocar los huevos."',
+            '"Un Charlipú motivado con una lata de Eneryeti multiplica el ritmo de cada clic."',
+            '"Charlipú consulta nervioso su calendario regresivo de Semana Santa entre clic y clic."',
+            '"El sindicato de fisioterapeutas recomienda estirar el dedo índice tras sesiones intensas con Charlipú."'
+          );
+        }
+
+        if (state.unlockedAchievements.length >= 3) {
+          pool.push(
+            '"El nivel de Mojo Picón sube en la caldera central y potencia toda la fábrica."',
+            '"Un ajo arrugado y un buen vinagre maduro elevan el multiplicador de la producción."',
+            '"Los Guillermos supervisan con orgullo la intensidad picante del Mojo Picón."'
+          );
+        }
+
+        if (state.ownedUpgrades.some(id => id.startsWith('flavor_'))) {
+          pool.push(
+            '"Llegan al mercado nuevas variedades temáticas de Mengutibos con gran acogida."',
+            '"Coleccionistas de todo el país intentan reunir el surtido completo de Mengutibos especiales."'
+          );
+        }
+
+        return pool[Math.floor(Math.random() * pool.length)];
+      }
+
+      const newsEl = document.getElementById('news-ticker');
+      newsEl.textContent = getContextNews();
+      setInterval(() => {
+        newsEl.textContent = getContextNews();
+      }, 10500);
+
+      // =========================================================================
+      // BUCLE PRINCIPAL (60 FPS ANIMACIÓN + PRODUCCIÓN CONTINUA)
+      // =========================================================================
+      let lastFrameTime = performance.now();
+      let lastUiSync = 0;
+      let lastAutoSave = performance.now();
+
+      function gameLoop(now) {
+        const dt = Math.min(0.25, (now - lastFrameTime) / 1000);
+        lastFrameTime = now;
+
+        const metrics = calculateMetrics();
+        if (metrics.cps > 0) {
+          const produced = metrics.cps * dt;
+          state.mengutibos += produced;
+          state.totalBaked += produced;
+          if (Math.random() < Math.min(0.45, Math.log10(metrics.cps + 1) * 0.08)) {
+            spawnFallingMengutibo();
+          }
+        }
+
+        // Inercia y giro del Mengutibo gigante
+        mengutiboAngle += mengutiboSpinVel * dt;
+        mengutiboSpinVel = Math.max(0.22, mengutiboSpinVel * Math.pow(0.28, dt));
+        mengutiboScalePunch = Math.max(0, mengutiboScalePunch - dt * 1.4);
+
+        // Dibujar Mengutibo central
+        const bw = bigCanvas.width;
+        const bh = bigCanvas.height;
+        if (bw > 0 && bh > 0) {
+          bigCtx.clearRect(0, 0, bw, bh);
+          bigCtx.save();
+          bigCtx.translate(bw / 2, bh / 2);
+          bigCtx.rotate(mengutiboAngle);
+          const scale = 0.88 + mengutiboScalePunch;
+          const size = Math.min(bw, bh) * scale;
+          bigCtx.imageSmoothingEnabled = false;
+          const mImg = getImageObj('mengutibo');
+          if (mImg.complete) {
+            bigCtx.drawImage(mImg, -size / 2, -size / 2, size, size);
+          }
+          bigCtx.restore();
+        }
+
+        // Dibujar fondo izquierdo (rayos, lluvia, bolígrafos orbitando y olas de Mojo Picón)
+        const w = bgCanvas.width;
+        const h = bgCanvas.height;
+        if (w > 0 && h > 0) {
+          bgCtx.clearRect(0, 0, w, h);
+
+          // Rayos giratorios detrás del Mengutibo
+          rayAngle += 0.14 * dt;
+          const cx = w / 2;
+          const cy = h * 0.56;
+          bgCtx.save();
+          bgCtx.translate(cx, cy);
+          bgCtx.rotate(rayAngle);
+          const numRays = 16;
+          const maxR = Math.max(w, h) * 0.95;
+          for (let i = 0; i < numRays; i++) {
+            const a1 = (i / numRays) * Math.PI * 2;
+            const a2 = a1 + (Math.PI / numRays) * 0.72;
+            bgCtx.beginPath();
+            bgCtx.moveTo(0, 0);
+            bgCtx.arc(0, 0, maxR, a1, a2);
+            bgCtx.closePath();
+            bgCtx.fillStyle = 'rgba(255, 214, 160, 0.045)';
+            bgCtx.fill();
+          }
+          bgCtx.restore();
+
+          // Lluvia de Mengutibos
+          const mImg = getImageObj('mengutibo');
+          bgCtx.imageSmoothingEnabled = false;
+          for (let i = fallingMengutibos.length - 1; i >= 0; i--) {
+            const p = fallingMengutibos[i];
+            p.y += p.vy * dt;
+            p.rot += p.vrot * dt;
+            if (p.y > h + 30) {
+              fallingMengutibos.splice(i, 1);
+              continue;
+            }
+            bgCtx.save();
+            bgCtx.globalAlpha = 0.34;
+            bgCtx.translate(p.x, p.y);
+            bgCtx.rotate(p.rot);
+            if (mImg.complete) {
+              bgCtx.drawImage(mImg, -p.size / 2, -p.size / 2, p.size, p.size);
+            }
+            bgCtx.restore();
+          }
+
+          // Bolígrafos rojos orbitando alrededor del Mengutibo
+          const boliOwned = state.buildings.boligrafos || 0;
+          if (boliOwned > 0 && mImg.complete) {
+            const boliImg = getImageObj('boligrafos');
+            const displayBolis = Math.min(boliOwned, 60);
+            const baseRadius = Math.min(w, h) * 0.31;
+            for (let i = 0; i < displayBolis; i++) {
+              const ring = Math.floor(i / 20);
+              const idxInRing = i % 20;
+              const countInRing = Math.min(20, displayBolis - ring * 20);
+              const r = baseRadius + ring * 22;
+              const theta = (idxInRing / countInRing) * Math.PI * 2 + rayAngle * (ring % 2 === 0 ? 1.8 : -1.4);
+              const bx = cx + Math.cos(theta) * r;
+              const by = cy + Math.sin(theta) * r;
+              bgCtx.save();
+              bgCtx.translate(bx, by);
+              bgCtx.rotate(theta + Math.PI / 2);
+              if (boliImg.complete) {
+                bgCtx.drawImage(boliImg, -11, -11, 22, 22);
+              }
+              bgCtx.restore();
+            }
+          }
+
+          // Olas de Mojo Picón en la parte inferior
+          wavePhase += 2.2 * dt;
+          const mojoHeight = Math.min(h * 0.24, 26 + metrics.mojoPct * 0.65);
+          const waveTop = h - mojoHeight;
+
+          // Ola trasera más oscura
+          bgCtx.beginPath();
+          bgCtx.moveTo(0, h);
+          for (let x = 0; x <= w; x += 8) {
+            const y = waveTop - 4 + Math.sin(x * 0.025 + wavePhase * 0.8) * 5;
+            bgCtx.lineTo(x, y);
+          }
+          bgCtx.lineTo(w, h);
+          bgCtx.closePath();
+          bgCtx.fillStyle = 'rgba(138, 22, 12, 0.72)';
+          bgCtx.fill();
+
+          // Ola delantera rojo intenso
+          bgCtx.beginPath();
+          bgCtx.moveTo(0, h);
+          for (let x = 0; x <= w; x += 6) {
+            const y = waveTop + Math.sin(x * 0.032 + wavePhase) * 5;
+            bgCtx.lineTo(x, y);
+          }
+          bgCtx.lineTo(w, h);
+          bgCtx.closePath();
+          const grad = bgCtx.createLinearGradient(0, waveTop, 0, h);
+          grad.addColorStop(0, 'rgba(219, 44, 24, 0.88)');
+          grad.addColorStop(1, 'rgba(110, 14, 6, 0.96)');
+          bgCtx.fillStyle = grad;
+          bgCtx.fill();
+        }
+
+        if (now - lastUiSync > 120) {
+          lastUiSync = now;
+          updateAllUI(false);
+        }
+
+        if (now - lastAutoSave >= 10000) { lastAutoSave = now; saveGame(); }
+        requestAnimationFrame(gameLoop);
+      }
+
+      window.addEventListener('beforeunload', saveGame);
+      window.addEventListener('pagehide', saveGame);
+      document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') saveGame(); });
+
+      // =========================================================================
+      // NAVEGACIÓN DE PESTAÑAS, TIENDA Y MODALES (EXPORTAR / IMPORTAR / NOMBRE)
+      // =========================================================================
+      document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('cc-btn-active'));
+          btn.classList.add('cc-btn-active');
+          const target = btn.dataset.tab;
+          document.querySelectorAll('.tab-panel').forEach(p => p.classList.add('hidden'));
+          document.getElementById(`tab-${target}`).classList.remove('hidden');
+          if (target === 'stats') {
+            renderStatsAndAchievements();
+          }
+        });
+      });
+
+      const modeBuyBtn = document.getElementById('mode-buy-btn');
+      const modeSellBtn = document.getElementById('mode-sell-btn');
+      modeBuyBtn.addEventListener('click', () => {
+        storeMode = 'buy';
+        modeBuyBtn.className = 'px-2.5 py-1 rounded bg-[#5c361c] border border-[#d9a46c] text-white';
+        modeSellBtn.className = 'px-2.5 py-1 rounded bg-[#211108] border border-[#613c22] text-[#b8926a]';
+        renderStore(true);
+      });
+      modeSellBtn.addEventListener('click', () => {
+        storeMode = 'sell';
+        modeSellBtn.className = 'px-2.5 py-1 rounded bg-[#5c361c] border border-[#d9a46c] text-white';
+        modeBuyBtn.className = 'px-2.5 py-1 rounded bg-[#211108] border border-[#613c22] text-[#b8926a]';
+        renderStore(true);
+      });
+
+      document.querySelectorAll('.bulk-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          bulkAmount = parseInt(btn.dataset.bulk, 10) || 1;
+          document.querySelectorAll('.bulk-btn').forEach(b => {
+            b.className = 'bulk-btn px-2 py-1 rounded bg-[#211108] border border-[#613c22] text-[#b8926a]';
+          });
+          btn.className = 'bulk-btn px-2 py-1 rounded bg-[#5c361c] border border-[#d9a46c] text-white';
+          renderStore(true);
+        });
+      });
+
+      // Gestión del Modal
+      const modalBackdrop = document.getElementById('cc-modal-backdrop');
+      const modalTitle = document.getElementById('modal-title');
+      const modalSubtitle = document.getElementById('modal-subtitle');
+      const modalTextarea = document.getElementById('modal-textarea');
+      const modalInput = document.getElementById('modal-input');
+      const modalFeedback = document.getElementById('modal-feedback');
+      const modalActionBtn = document.getElementById('modal-action-btn');
+      let currentModalMode = '';
+
+      function openModal(mode) {
+        currentModalMode = mode;
+        modalFeedback.classList.add('hidden');
+        modalTextarea.classList.add('hidden');
+        modalInput.classList.add('hidden');
+
+        if (mode === 'export') {
+          modalTitle.textContent = 'Exportar partida (v1.0)';
+          modalSubtitle.textContent = 'Copia este código y guárdalo en un lugar seguro para restaurar tu partida más adelante.';
+          modalTextarea.classList.remove('hidden');
+          modalTextarea.readOnly = true;
+          const payload = JSON.stringify({ v: '1.0', state });
+          modalTextarea.value = btoa(unescape(encodeURIComponent(payload)));
+          modalActionBtn.textContent = 'Copiar código';
+        } else if (mode === 'import') {
+          modalTitle.textContent = 'Importar partida';
+          modalSubtitle.textContent = 'Pega aquí el código de partida exportado anteriormente y pulsa Cargar.';
+          modalTextarea.classList.remove('hidden');
+          modalTextarea.readOnly = false;
+          modalTextarea.value = '';
+          modalActionBtn.textContent = 'Cargar partida';
+        } else if (mode === 'rename') {
+          modalTitle.textContent = 'Nombre de tu fábrica';
+          modalSubtitle.textContent = 'Escribe el nombre que quieres darle a tu fábrica de Mengutibos:';
+          modalInput.classList.remove('hidden');
+          modalInput.value = state.bakeryName;
+          modalActionBtn.textContent = 'Guardar nombre';
+        } else if (mode === 'reset') {
+          modalTitle.textContent = 'Reiniciar partida';
+          modalSubtitle.textContent = '¿Seguro que quieres borrar todo tu progreso actual y empezar de cero?';
+          modalActionBtn.textContent = 'Sí, reiniciar';
+        }
+
+        modalBackdrop.classList.remove('hidden');
+      }
+
+      function closeModal() {
+        modalBackdrop.classList.add('hidden');
+      }
+
+      document.getElementById('modal-close-btn').addEventListener('click', closeModal);
+      document.getElementById('modal-cancel-btn').addEventListener('click', closeModal);
+      document.getElementById('open-export-btn').addEventListener('click', () => openModal('export'));
+      document.getElementById('open-import-btn').addEventListener('click', () => openModal('import'));
+      document.getElementById('bakery-name-btn').addEventListener('click', () => openModal('rename'));
+      document.getElementById('reset-game-btn').addEventListener('click', () => openModal('reset'));
+
+      document.getElementById('toggle-sound-btn').addEventListener('click', (e) => {
+        soundEnabled = !soundEnabled;
+        e.target.textContent = `Sonido: ${soundEnabled ? 'Activado' : 'Desactivado'}`;
+      });
+
+      modalActionBtn.addEventListener('click', () => {
+        if (currentModalMode === 'export') {
+          modalTextarea.select();
+          document.execCommand('copy');
+          modalFeedback.textContent = '¡Código copiado al portapapeles!';
+          modalFeedback.className = 'text-xs font-bold text-[#7ef29d]';
+          modalFeedback.classList.remove('hidden');
+        } else if (currentModalMode === 'import') {
+          try {
+            const raw = modalTextarea.value.trim();
+            if (!raw) throw new Error('Vacío');
+            const decoded = decodeURIComponent(escape(atob(raw)));
+            const parsed = JSON.parse(decoded);
+            if (!parsed || !parsed.state || typeof parsed.state.mengutibos !== 'number') {
+              throw new Error('Formato inválido');
+            }
+            const fresh = createInitialState();
+            state = {
+              ...fresh,
+              ...parsed.state,
+              buildings: { ...fresh.buildings, ...(parsed.state.buildings || {}) },
+              ownedUpgrades: Array.isArray(parsed.state.ownedUpgrades) ? parsed.state.ownedUpgrades : [],
+              unlockedAchievements: Array.isArray(parsed.state.unlockedAchievements) ? parsed.state.unlockedAchievements : []
+            };
+            updateAllUI(true);
+            closeModal();
+          } catch (err) {
+            modalFeedback.textContent = 'El código introducido no es válido. Verifica que lo hayas copiado completo.';
+            modalFeedback.className = 'text-xs font-bold text-[#ff7b6b]';
+            modalFeedback.classList.remove('hidden');
+          }
+        } else if (currentModalMode === 'rename') {
+          const val = modalInput.value.trim();
+          if (val) {
+            state.bakeryName = val;
+            updateAllUI(false);
+          }
+          closeModal();
+        } else if (currentModalMode === 'reset') {
+          state = createInitialState();
+          frenzyUntil = 0;
+          clickBoostUntil = 0;
+          updateAllUI(true);
+          closeModal();
+        }
+      });
+
+      // Arrancar la interfaz y el bucle del juego
+      updateAllUI(true);
+      requestAnimationFrame(gameLoop);
+    });
+  
